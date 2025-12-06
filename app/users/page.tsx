@@ -1173,12 +1173,14 @@ export default function UsersPage() {
                           <div className="text-right">
                             <span
                               className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                business.getAnchorData?.kybVerification?.data?.attributes?.kycStatus === 'APPROVED'
+                                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                                (business as any).kycStatus === 'APPROVED'
                                   ? 'bg-green-100 text-green-800'
                                   : 'bg-yellow-100 text-yellow-800'
                               }`}
                             >
-                              {business.getAnchorData?.kybVerification?.data?.attributes?.kycStatus || 'Pending'}
+                              {/* eslint-disable-next-line @typescript-eslint/no-explicit-any */}
+                              {(business as any).kycStatus || 'Pending'}
                             </span>
                           </div>
                         </div>
