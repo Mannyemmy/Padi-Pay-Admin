@@ -1,26 +1,590 @@
-@import "tailwindcss";
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
 
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  --brand-primary: #2563eb;
+  --brand-accent: #10b981;
+  --ui-radius: 12px;
+  --sidebar-bg: #ffffff;
+  --sidebar-text: #111827;
+  --sidebar-text-secondary: #9ca3af;
+  --sidebar-border: #e5e7eb;
+  --sidebar-hover: #f3f4f6;
+  --sidebar-active-bg: #dbeafe;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
+html[data-theme="dark"] {
+  --sidebar-bg: #111827;
+  --sidebar-text: #f3f4f6;
+  --sidebar-text-secondary: #d1d5db;
+  --sidebar-border: #374151;
+  --sidebar-hover: #1f2937;
+  --sidebar-active-bg: #1f2937;
 }
 
 @media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
+  html[data-theme="system"] {
+    --sidebar-bg: #111827;
+    --sidebar-text: #f3f4f6;
+    --sidebar-text-secondary: #d1d5db;
+    --sidebar-border: #374151;
+    --sidebar-hover: #1f2937;
+    --sidebar-active-bg: #1f2937;
   }
 }
 
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+  color-scheme: light;
+  /* Webkit scrollbar (Chrome, Safari, Edge) */
+  scrollbar-color: #d1d5db #f3f4f6;
+  scrollbar-width: thin;
+}
+
+html[data-theme="dark"] {
+  color-scheme: dark;
+  scrollbar-color: #4b5563 #1f2937;
+}
+
+html[data-theme="system"] {
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] {
+    scrollbar-color: #4b5563 #1f2937;
+  }
+}
+
+/* Webkit scrollbar styling (Chrome, Safari, Edge) */
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+::-webkit-scrollbar-track {
+  background-color: #f3f4f6;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: #d1d5db;
+  border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: #9ca3af;
+}
+
+/* Dark mode scrollbar */
+html[data-theme="dark"] ::-webkit-scrollbar-track {
+  background-color: #1f2937;
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar-thumb {
+  background-color: #4b5563;
+  border-radius: 4px;
+}
+
+html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
+  background-color: #6b7280;
+}
+
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] ::-webkit-scrollbar-track {
+    background-color: #1f2937;
+  }
+
+  html[data-theme="system"] ::-webkit-scrollbar-thumb {
+    background-color: #4b5563;
+    border-radius: 4px;
+  }
+
+  html[data-theme="system"] ::-webkit-scrollbar-thumb:hover {
+    background-color: #6b7280;
+  }
+}
+
+/* Light mode (default) */
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  font-family: var(--font-inter);
+  background-color: #f9fafb;
+  color: #111827;
+  transition: background-color 0.3s ease, color 0.3s ease;
+}
+
+/* Dark mode */
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] body,
+  html[data-theme="dark"] body {
+    background-color: #0f172a;
+    color: #f1f5f9;
+  }
+}
+
+html[data-theme="dark"] body {
+  background-color: #0f172a;
+  color: #f1f5f9;
+}
+
+/* Utility classes */
+@layer components {
+  .card {
+    @apply bg-white rounded-lg border border-gray-200 p-6;
+    transition: background-color 0.3s ease, border-color 0.3s ease, color 0.3s ease;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="system"] .card {
+      @apply bg-gray-900 border-gray-700 text-gray-100;
+    }
+  }
+
+  html[data-theme="dark"] .card {
+    @apply bg-gray-900 border-gray-700 text-gray-100;
+  }
+
+  /* Override all white backgrounds in dark mode */
+  html[data-theme="dark"] .bg-white,
+  html[data-theme="dark"] [class*="bg-white"] {
+    background-color: #111827 !important;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="system"] .bg-white,
+    html[data-theme="system"] [class*="bg-white"] {
+      background-color: #111827 !important;
+    }
+  }
+
+  .btn-primary {
+    @apply px-4 py-2 text-white rounded-lg hover:opacity-90 transition-all;
+    background-color: var(--brand-primary);
+  }
+
+  .btn-primary:hover {
+    filter: brightness(0.9);
+  }
+
+  .btn-secondary {
+    @apply px-4 py-2 border border-gray-300 text-gray-700 rounded-lg hover:bg-gray-50 transition-colors;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="system"] .btn-secondary {
+      @apply border-gray-600 text-gray-300 hover:bg-gray-800;
+    }
+  }
+
+  html[data-theme="dark"] .btn-secondary {
+    @apply border-gray-600 text-gray-300 hover:bg-gray-800;
+  }
+
+  .badge-success {
+    @apply inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-green-100 text-green-800;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="system"] .badge-success {
+      @apply bg-green-900 text-green-200;
+    }
+  }
+
+  html[data-theme="dark"] .badge-success {
+    @apply bg-green-900 text-green-200;
+  }
+
+  .badge-warning {
+    @apply inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-yellow-100 text-yellow-800;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="system"] .badge-warning {
+      @apply bg-yellow-900 text-yellow-200;
+    }
+  }
+
+  html[data-theme="dark"] .badge-warning {
+    @apply bg-yellow-900 text-yellow-200;
+  }
+
+  .badge-danger {
+    @apply inline-flex px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800;
+  }
+
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="system"] .badge-danger {
+      @apply bg-red-900 text-red-200;
+    }
+  }
+
+  html[data-theme="dark"] .badge-danger {
+    @apply bg-red-900 text-red-200;
+  }
+
+  /* Compact mode */
+  html.ui-compact body {
+    font-size: 0.875rem;
+  }
+
+  html.ui-compact .card,
+  html.ui-compact [class*="p-6"] {
+    @apply p-3;
+  }
+
+  /* Shadows toggle */
+  html.ui-no-shadows .card,
+  html.ui-no-shadows [class*="shadow"] {
+    box-shadow: none !important;
+  }
+
+  /* Global dark mode styles for text and elements */
+  @media (prefers-color-scheme: dark) {
+    html[data-theme="system"] input,
+    html[data-theme="system"] select,
+    html[data-theme="system"] textarea {
+      background-color: #1f2937;
+      border-color: #4b5563;
+      color: #f3f4f6;
+    }
+
+    html[data-theme="system"] table {
+      background-color: #111827;
+    }
+
+    html[data-theme="system"] thead {
+      background-color: #1f2937;
+    }
+
+    html[data-theme="system"] tbody tr {
+      border-color: #374151;
+    }
+
+    html[data-theme="system"] tbody tr:hover {
+      background-color: #1f2937;
+    }
+
+    html[data-theme="system"] .text-gray-900 {
+      color: #f3f4f6;
+    }
+
+    html[data-theme="system"] .text-gray-700 {
+      color: #d1d5db;
+    }
+
+    html[data-theme="system"] .bg-gray-50 {
+      background-color: #1f2937;
+    }
+
+    html[data-theme="system"] .border-gray-200 {
+      border-color: #374151;
+    }
+  }
+
+  html[data-theme="dark"] input,
+  html[data-theme="dark"] select,
+  html[data-theme="dark"] textarea {
+    background-color: #1f2937;
+    border-color: #4b5563;
+    color: #f3f4f6;
+  }
+
+  html[data-theme="dark"] table {
+    background-color: #111827;
+  }
+
+  html[data-theme="dark"] thead {
+    background-color: #1f2937;
+  }
+
+  html[data-theme="dark"] tbody tr {
+    border-color: #374151;
+  }
+
+  html[data-theme="dark"] tbody tr:hover {
+    background-color: #1f2937;
+  }
+
+  html[data-theme="dark"] .text-gray-900 {
+    color: #f3f4f6;
+  }
+
+  html[data-theme="dark"] .text-gray-700 {
+    color: #d1d5db;
+  }
+
+  html[data-theme="dark"] .bg-gray-50 {
+    background-color: #1f2937;
+  }
+
+  html[data-theme="dark"] .border-gray-200 {
+    border-color: #374151;
+  }
+
+  /* Animations */
+  @keyframes slideInFromTop {
+    from {
+      opacity: 0;
+      transform: translateY(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInFromBottom {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  @keyframes slideInFromLeft {
+    from {
+      opacity: 0;
+      transform: translateX(-10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateX(0);
+    }
+  }
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+
+  @keyframes zoomIn {
+    from {
+      opacity: 0;
+      transform: scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: scale(1);
+    }
+  }
+
+  @keyframes pulse {
+    0%, 100% {
+      opacity: 1;
+    }
+    50% {
+      opacity: 0.5;
+    }
+  }
+
+  @keyframes shimmer {
+    0% {
+      background-position: -1000px 0;
+    }
+    100% {
+      background-position: 1000px 0;
+    }
+  }
+
+  .animate-in {
+    animation: slideInFromBottom 0.3s ease-out;
+  }
+
+  .animate-in.slide-in-from-top-2 {
+    animation: slideInFromTop 0.3s ease-out;
+  }
+
+  .animate-in.fade-in {
+    animation: fadeIn 0.3s ease-out;
+  }
+
+  .animate-in.zoom-in-95 {
+    animation: zoomIn 0.2s ease-out;
+  }
+
+  .duration-200 {
+    animation-duration: 0.2s;
+  }
+
+  .duration-300 {
+    animation-duration: 0.3s;
+  }
+
+  /* Hover effects */
+  .card {
+    transition: all 0.3s ease;
+  }
+
+  .card:hover {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+    transform: translateY(-2px);
+  }
+
+  html[data-theme="dark"] .card:hover {
+    box-shadow: 0 10px 25px rgba(0, 0, 0, 0.3);
+  }
+
+  /* Button animations */
+  button {
+    transition: all 0.2s ease;
+  }
+
+  button:hover:not(:disabled) {
+    transform: translateY(-1px);
+  }
+
+  button:active:not(:disabled) {
+    transform: translateY(0);
+  }
+
+  button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+  }
+
+  /* Input focus states */
+  input,
+  select,
+  textarea {
+    transition: all 0.2s ease;
+  }
+
+  input:focus,
+  select:focus,
+  textarea:focus {
+    outline: none;
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.1);
+    border-color: var(--brand-primary, #2563eb);
+  }
+
+  html[data-theme="dark"] input:focus,
+  html[data-theme="dark"] select:focus,
+  html[data-theme="dark"] textarea:focus {
+    box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.2);
+  }
+
+  /* Form error states */
+  input.error,
+  textarea.error,
+  select.error {
+    border-color: #ef4444 !important;
+    background-color: #fee2e2;
+  }
+
+  html[data-theme="dark"] input.error,
+  html[data-theme="dark"] textarea.error,
+  html[data-theme="dark"] select.error {
+    background-color: #7f1d1d;
+  }
+
+  /* Success states */
+  input.success,
+  textarea.success,
+  select.success {
+    border-color: #10b981 !important;
+  }
+
+  /* Loading spinner */
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+
+  .animate-spin {
+    animation: spin 1s linear infinite;
+  }
+
+  /* Table responsive */
+  @media (max-width: 768px) {
+    table {
+      font-size: 0.875rem;
+    }
+
+    table td, table th {
+      padding: 0.5rem;
+    }
+  }
+
+  /* Status badges */
+  .badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 9999px;
+    font-size: 0.75rem;
+    font-weight: 600;
+    transition: all 0.2s ease;
+  }
+
+  .badge:hover {
+    transform: scale(1.05);
+  }
+
+  .badge-success {
+    background-color: #dcfce7;
+    color: #166534;
+  }
+
+  html[data-theme="dark"] .badge-success {
+    background-color: #064e3b;
+    color: #86efac;
+  }
+
+  .badge-warning {
+    background-color: #fef3c7;
+    color: #92400e;
+  }
+
+  html[data-theme="dark"] .badge-warning {
+    background-color: #78350f;
+    color: #fcd34d;
+  }
+
+  .badge-danger {
+    background-color: #fee2e2;
+    color: #991b1b;
+  }
+
+  html[data-theme="dark"] .badge-danger {
+    background-color: #7f1d1d;
+    color: #fca5a5;
+  }
+
+  .badge-info {
+    background-color: #dbeafe;
+    color: #1e40af;
+  }
+
+  html[data-theme="dark"] .badge-info {
+    background-color: #0c2340;
+    color: #93c5fd;
+  }
+
+  .badge-pending {
+    background-color: #f3e8ff;
+    color: #6b21a8;
+  }
+
+  html[data-theme="dark"] .badge-pending {
+    background-color: #4c1d95;
+    color: #e9d5ff;
+  }
 }
