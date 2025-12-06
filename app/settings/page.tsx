@@ -50,11 +50,20 @@ export default function SettingsPage() {
   // Apply settings to DOM
   useEffect(() => {
     const root = document.documentElement;
+    const isDark = settings.defaultTheme === 'dark';
+    
     root.style.setProperty('--brand-primary', settings.primaryColor);
     root.style.setProperty('--brand-accent', settings.accentColor);
     root.style.setProperty('--ui-radius', `${settings.buttonRadius}px`);
     root.dataset.theme = settings.defaultTheme;
-    root.classList.toggle('dark', settings.defaultTheme === 'dark');
+    
+    // Explicitly add or remove dark class
+    if (isDark) {
+      root.classList.add('dark');
+    } else {
+      root.classList.remove('dark');
+    }
+    
     root.classList.toggle('ui-compact', settings.compactMode);
     root.classList.toggle('ui-no-shadows', !settings.enableShadows);
   }, [settings]);

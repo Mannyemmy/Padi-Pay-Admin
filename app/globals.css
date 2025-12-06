@@ -114,23 +114,24 @@ html[data-theme="dark"] ::-webkit-scrollbar-thumb:hover {
 /* Light mode (default) */
 body {
   font-family: var(--font-inter);
-  background-color: #f9fafb;
+  background-color: #f9fafb !important;
   color: #111827;
   transition: background-color 0.3s ease, color 0.3s ease;
 }
 
-/* Dark mode */
-@media (prefers-color-scheme: dark) {
-  html[data-theme="system"] body,
-  html[data-theme="dark"] body {
-    background-color: #0f172a;
-    color: #f1f5f9;
-  }
+/* Only apply dark background when dark class is present */
+html.dark body,
+.dark body,
+html[data-theme="dark"] body {
+  background-color: #0f172a !important;
+  color: #f1f5f9;
 }
 
-html[data-theme="dark"] body {
-  background-color: #0f172a;
-  color: #f1f5f9;
+@media (prefers-color-scheme: dark) {
+  html[data-theme="system"] body {
+    background-color: #0f172a !important;
+    color: #f1f5f9;
+  }
 }
 
 /* Utility classes */
@@ -151,14 +152,13 @@ html[data-theme="dark"] body {
   }
 
   /* Override all white backgrounds in dark mode */
-  html[data-theme="dark"] .bg-white,
-  html[data-theme="dark"] [class*="bg-white"] {
+  .dark .bg-white,
+  html[data-theme="dark"] .bg-white {
     background-color: #111827 !important;
   }
 
   @media (prefers-color-scheme: dark) {
-    html[data-theme="system"] .bg-white,
-    html[data-theme="system"] [class*="bg-white"] {
+    html[data-theme="system"] .bg-white {
       background-color: #111827 !important;
     }
   }
