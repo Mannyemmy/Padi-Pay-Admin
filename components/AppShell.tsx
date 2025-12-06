@@ -14,7 +14,6 @@ const roleAccess: Record<string, Array<'admin' | 'customer_service'>> = {
   '/admins/': ['admin'],
   '/transactions': ['admin'],
   '/communications': ['admin', 'customer_service'],
-  '/communications': ['admin', 'customer_service'],
   '/communications/': ['admin', 'customer_service'],
   '/settings': ['admin'],
 };
