@@ -481,9 +481,11 @@ export default function UsersPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-gray-900">Users & Businesses</h1>
-        <p className="text-gray-500 mt-1">Manage all registered users and businesses</p>
+      <div className="flex flex-col gap-3">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Users & Businesses</h1>
+          <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mt-1">Manage all registered users and businesses</p>
+        </div>
       </div>
 
       {error && (

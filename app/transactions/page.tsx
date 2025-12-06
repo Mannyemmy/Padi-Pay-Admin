@@ -1,13 +1,11 @@
 'use client';
 
 import { useEffect, useMemo, useState } from 'react';
-import { Search, Filter, X, ExternalLink, Loader, FileText, CheckCircle, Building2, ChevronUp, ChevronDown } from 'lucide-react';
+import { Search, X, ExternalLink, Loader, FileText, CheckCircle, Building2, CreditCard } from 'lucide-react';
 import { Transaction, User, Business } from '@/lib/types';
 import { getTransactions, getUsers, getBusinesses, getTransactionsByUser } from '@/lib/firestore';
 import { Pagination } from '@/components/Pagination';
 import { EmptyState } from '@/components/EmptyState';
-import { showToast } from '@/components/Toast';
-import { CreditCard } from 'lucide-react';
 
 type RawTxn = Record<string, unknown>;
 
@@ -292,8 +290,8 @@ export default function TransactionsPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold text-gray-900">Transactions</h1>
-        <p className="text-gray-500 mt-1">View and manage all transactions</p>
+        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Transactions</h1>
+        <p className="text-sm sm:text-base text-gray-500 mt-1">View and manage all transactions</p>
       </div>
 
       {error && (
@@ -421,126 +419,61 @@ export default function TransactionsPage() {
         ) : (
           <>
             <div className="overflow-x-auto">
-              <table className="w-full">
-                <thead className="bg-gray-50 dark:bg-gray-800 border-b border-gray-200 dark:border-gray-700">
+              <table className="min-w-full divide-y divide-gray-200 dark:divide-gray-700">
+                <thead className="bg-gray-50 dark:bg-gray-900">
                   <tr>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Document ID
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Transaction Reference
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      User
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Type
-                    </th>
-                    <th 
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                      onClick={() => {
-                        if (sortField === 'amount') {
-                          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                        } else {
-                          setSortField('amount');
-                          setSortDirection('desc');
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        Amount
-                        {sortField === 'amount' && (
-                          sortDirection === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />
-                        )}
-                      </div>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Status
-                    </th>
-                    <th 
-                      className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider cursor-pointer hover:text-gray-700 dark:hover:text-gray-300"
-                      onClick={() => {
-                        if (sortField === 'date') {
-                          setSortDirection(sortDirection === 'asc' ? 'desc' : 'asc');
-                        } else {
-                          setSortField('date');
-                          setSortDirection('desc');
-                        }
-                      }}
-                    >
-                      <div className="flex items-center gap-2">
-                        Date
-                        {sortField === 'date' && (
-                          sortDirection === 'desc' ? <ChevronDown className="w-4 h-4" /> : <ChevronUp className="w-4 h-4" />
-                        )}
-                      </div>
-                    </th>
-                    <th className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">
-                      Actions
-                    </th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">User</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Type</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Amount</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Status</th>
+                    <th scope="col" className="px-6 py-3 text-left text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Date</th>
+                    <th scope="col" className="px-6 py-3 text-right text-xs font-medium text-gray-500 dark:text-gray-400 uppercase tracking-wider">Action</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                {paginatedTransactions.map((transaction, idx) => (
-                  <tr 
-                    key={transaction.id} 
-                    className="hover:bg-gray-50 dark:hover:bg-gray-800 transition-colors animate-in fade-in"
-                    style={{ animationDelay: `${idx * 50}ms` }}
-                  >
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">{transaction.id}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-xs text-gray-500 dark:text-gray-400">{transaction.reference}</div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => {
-                          const user = users.find(u => u.id === transaction.userId || u.id === (transaction as any)?.user_id);
-                          setSelectedUser(user || null);
-                        }}
-                        className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium transition-colors"
-                      >
-                        {transaction.userName || 'Unknown user'}
-                      </button>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full badge badge-info capitalize">
+                <tbody className="bg-white dark:bg-gray-800 divide-y divide-gray-200 dark:divide-gray-700">
+                  {paginatedTransactions.map((transaction) => (
+                    <tr key={transaction.id} className="hover:bg-gray-50 dark:hover:bg-gray-900/50 transition-colors">
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {transaction.userName || 'Unknown user'}
+                        </div>
+                        <div className="text-xs text-gray-500">{transaction.reference || 'N/A'}</div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-700 dark:text-gray-300 capitalize">
                         {formatTransactionType(transaction.type)}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        {formatAmount(transaction.amount, (transaction as any).currency)}
-                      </div>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full badge badge-${
-                        transaction.status === 'success' || transaction.status === 'successful'
-                          ? 'success'
-                          : transaction.status === 'pending'
-                          ? 'pending'
-                          : 'danger'
-                      }`}>
-                        {transaction.status || 'unknown'}
-                      </span>
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
-                      {transaction.date ? new Date(transaction.date).toLocaleString() : 'N/A'}
-                    </td>
-                    <td className="px-6 py-4 whitespace-nowrap">
-                      <button
-                        onClick={() => setSelectedTransaction(transaction)}
-                        className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
-                      >
-                        <ExternalLink className="w-5 h-5" />
-                      </button>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
+                          {formatAmount(transaction.amount, (transaction as any).currency)}
+                        </div>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap">
+                        <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full badge badge-${
+                          transaction.status === 'success' || transaction.status === 'successful'
+                            ? 'success'
+                            : transaction.status === 'pending'
+                            ? 'pending'
+                            : 'danger'
+                        }`}>
+                          {transaction.status || 'unknown'}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 dark:text-gray-400">
+                        {transaction.date ? new Date(transaction.date).toLocaleString() : 'N/A'}
+                      </td>
+                      <td className="px-6 py-4 whitespace-nowrap text-right">
+                        <button
+                          onClick={() => setSelectedTransaction(transaction)}
+                          className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 transition-colors"
+                        >
+                          <ExternalLink className="w-5 h-5" />
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
 
           {/* Pagination Controls */}
           <div className="px-6 py-4 border-t border-gray-200 dark:border-gray-700 flex items-center justify-between">
@@ -790,97 +723,87 @@ export default function TransactionsPage() {
                       <p className="text-xs text-gray-500 mb-1">Bank</p>
                       <p className="text-sm font-medium text-gray-900">
                         {selectedUser.getAnchorData?.virtualAccount?.data?.attributes?.bank?.name || 'N/A'}
-
-                                      {/* Recent Transactions */}
-                                      <div>
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                                          Recent Transactions
-                                        </h3>
-                                        {loadingTransactions ? (
-                                          <div className="flex items-center justify-center py-8">
-                                            <Loader className="w-5 h-5 animate-spin text-gray-400" />
-                                          </div>
-                                        ) : userTransactions.length > 0 ? (
-                                          <div className="space-y-3">
-                                            {userTransactions.map((transaction) => (
-                                              <div
-                                                key={transaction.id}
-                                                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                                              >
-                                                <div>
-                                                  <p className="text-sm font-medium text-gray-900 capitalize">
-                                                    {formatTransactionType(transaction.type)}
-                                                  </p>
-                                                  <p className="text-xs text-gray-500">
-                                                    {transaction.date
-                                                      ? new Date(transaction.date).toLocaleDateString()
-                                                      : 'N/A'}
-                                                  </p>
-                                                </div>
-                                                <p
-                                                  className={`text-sm font-semibold ${
-                                                    transaction.amount && transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
-                                                  }`}
-                                                >
-                                                  {transaction.amount && transaction.amount > 0 ? '+' : ''}₦
-                                                  {Math.abs(transaction.amount || 0).toLocaleString()}
-                                                </p>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        ) : (
-                                          <p className="text-sm text-gray-500 text-center py-8">
-                                            No transactions found
-                                          </p>
-                                        )}
-                                      </div>
-
-                                      {/* Owned Businesses */}
-                                      <div>
-                                        <h3 className="text-lg font-semibold text-gray-900 mb-4">
-                                          Owned Businesses ({getUserBusinesses(selectedUser.id).length})
-                                        </h3>
-                                        {getUserBusinesses(selectedUser.id).length > 0 ? (
-                                          <div className="space-y-3">
-                                            {getUserBusinesses(selectedUser.id).map((business) => (
-                                              <div
-                                                key={business.id}
-                                                className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
-                                              >
-                                                <div className="flex items-center gap-3">
-                                                  <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
-                                                    <Building2 className="w-5 h-5 text-purple-600" />
-                                                  </div>
-                                                  <div>
-                                                    <p className="text-sm font-medium text-gray-900">
-                                                      {business.business_data?.name}
-                                                    </p>
-                                                    <p className="text-xs text-gray-500">{business.business_data?.industry}</p>
-                                                  </div>
-                                                </div>
-                                                <div className="text-right">
-                                                  <span
-                                                    className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                                                      business.getAnchorData?.kybVerification?.data?.attributes?.kycStatus === 'APPROVED'
-                                                        ? 'bg-green-100 text-green-800'
-                                                        : 'bg-yellow-100 text-yellow-800'
-                                                    }`}
-                                                  >
-                                                    {business.getAnchorData?.kybVerification?.data?.attributes?.kycStatus || 'Pending'}
-                                                  </span>
-                                                </div>
-                                              </div>
-                                            ))}
-                                          </div>
-                                        ) : (
-                                          <p className="text-sm text-gray-500 text-center py-8">
-                                            No businesses registered
-                                          </p>
-                                        )}
-                                      </div>
                       </p>
                     </div>
                   </div>
+                </div>
+
+                {/* Recent Transactions */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Recent Transactions</h3>
+                  {loadingTransactions ? (
+                    <div className="flex items-center justify-center py-8">
+                      <Loader className="w-5 h-5 animate-spin text-gray-400" />
+                    </div>
+                  ) : userTransactions.length > 0 ? (
+                    <div className="space-y-3">
+                      {userTransactions.map((transaction) => (
+                        <div
+                          key={transaction.id}
+                          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                        >
+                          <div>
+                            <p className="text-sm font-medium text-gray-900 capitalize">
+                              {formatTransactionType(transaction.type)}
+                            </p>
+                            <p className="text-xs text-gray-500">
+                              {transaction.date ? new Date(transaction.date).toLocaleDateString() : 'N/A'}
+                            </p>
+                          </div>
+                          <p
+                            className={`text-sm font-semibold ${
+                              transaction.amount && transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
+                            }`}
+                          >
+                            {transaction.amount && transaction.amount > 0 ? '+' : ''}₦
+                            {Math.abs(transaction.amount || 0).toLocaleString()}
+                          </p>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-8">No transactions found</p>
+                  )}
+                </div>
+
+                {/* Owned Businesses */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">
+                    Owned Businesses ({getUserBusinesses(selectedUser.id).length})
+                  </h3>
+                  {getUserBusinesses(selectedUser.id).length > 0 ? (
+                    <div className="space-y-3">
+                      {getUserBusinesses(selectedUser.id).map((business) => (
+                        <div
+                          key={business.id}
+                          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+                        >
+                          <div className="flex items-center gap-3">
+                            <div className="w-10 h-10 rounded-full bg-purple-100 flex items-center justify-center">
+                              <Building2 className="w-5 h-5 text-purple-600" />
+                            </div>
+                            <div>
+                              <p className="text-sm font-medium text-gray-900">{business.business_data?.name}</p>
+                              <p className="text-xs text-gray-500">{business.business_data?.industry}</p>
+                            </div>
+                          </div>
+                          <div className="text-right">
+                            <span
+                              className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                                business.getAnchorData?.kybVerification?.data?.attributes?.kycStatus === 'APPROVED'
+                                  ? 'bg-green-100 text-green-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}
+                            >
+                              {business.getAnchorData?.kybVerification?.data?.attributes?.kycStatus || 'Pending'}
+                            </span>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <p className="text-sm text-gray-500 text-center py-8">No businesses registered</p>
+                  )}
                 </div>
               </div>
             </div>

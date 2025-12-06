@@ -243,22 +243,22 @@ export default function DashboardPage() {
   return (
     <div className="space-y-6 animate-in fade-in duration-300">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
-          <p className="text-gray-500 dark:text-gray-400 mt-1">
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
+          <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mt-1">
             Welcome back! Here&apos;s what&apos;s happening.
           </p>
         </div>
 
         {/* Date Period Filter */}
-        <div className="flex items-center gap-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-1">
-          <Calendar className="w-4 h-4 text-gray-400 ml-2" />
+        <div className="flex items-center gap-1 sm:gap-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-1 overflow-x-auto">
+          <Calendar className="w-4 h-4 text-gray-400 ml-1 sm:ml-2 flex-shrink-0" />
           {(["today", "week", "month", "year"] as DatePeriod[]).map((period) => (
             <button
               key={period}
               onClick={() => setSelectedPeriod(period)}
-              className={`px-4 py-2 rounded-md text-sm font-medium transition-all transform hover:scale-105 ${
+              className={`px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
                 selectedPeriod === period
                   ? "bg-blue-600 text-white"
                   : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
@@ -274,7 +274,7 @@ export default function DashboardPage() {
       {loading ? (
         <SkeletonGrid count={4} />
       ) : (
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         <StatsCard
           title="Total Wallet Balance"
           value={loading ? '...' : `₦${stats.balance.toLocaleString()}`}
