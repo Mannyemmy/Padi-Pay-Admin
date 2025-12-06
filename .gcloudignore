@@ -1,0 +1,14 @@
+# Exclude local/VCS files
+.gcloudignore
+.git
+.gitignore
+node_modules
+
+# Exclude Firebase Functions from App Hosting uploads
+functions/**
+
+# Exclude common build artifacts (App Hosting builds fresh)
+.next
+npm-debug.log
+firebase-debug.log
+firebase-debug.*.log
