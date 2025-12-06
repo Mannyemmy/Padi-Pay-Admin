@@ -186,3 +186,58 @@ export const updateAdminAccount = onCall(async (request) => {
     throw new HttpsError("internal", "Failed to update admin account");
   }
 });
+
+/**
+ * Update user email in Authentication
+ */
+export const updateUserEmail = onCall(async (request) => {
+  // Check if the caller is authenticated
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  const {userId, newEmail} = request.data;
+
+  if (!userId || !newEmail) {
+    throw new HttpsError(
+      "invalid-argument",
+      "User ID and new email are required"
+    );
+  }
+
+  // Validate email format
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(newEmail)) {
+    throw new HttpsError("invalid-argument", "Invalid email format");
+  }
+
+  try {
+    // Update user email in Firebase Authentication
+    await admin.auth().updateUser(userId, {
+      email: newEmail,
+    });
+
+    logger.info(`Updated user email in Auth: ${userId}`);
+
+    return {success: true, message: "Email updated successfully"};
+  } catch (error: any) {
+    logger.error("Error updating user email in auth:", error);
+
+    if (error.code === "auth/user-not-found") {
+      throw new HttpsError("not-found", "User not found");
+    }
+
+    if (error.code === "auth/invalid-email") {
+      throw new HttpsError("invalid-argument", "Invalid email address");
+    }
+
+    if (error.code === "auth/email-already-exists") {
+      throw new HttpsError(
+        "already-exists",
+        "Email already in use"
+      );
+    }
+
+    throw new HttpsError("internal", "Failed to update user email");
+  }
+});

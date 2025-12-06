@@ -11,6 +11,30 @@ import { ConfirmModal } from '@/components/ConfirmModal';
 
 type TabType = 'users' | 'businesses';
 
+const getCurrencySymbol = (currency?: string): string => {
+  if (!currency) return '₦'; // Default to Naira
+  
+  const currencyLower = currency.toLowerCase();
+  if (currencyLower.includes('usd') || currencyLower.includes('dollar')) return '$';
+  if (currencyLower.includes('eur') || currencyLower.includes('euro')) return '€';
+  if (currencyLower.includes('gbp') || currencyLower.includes('pound')) return '£';
+  if (currencyLower.includes('ngn') || currencyLower.includes('naira')) return '₦';
+  
+  return '₦'; // Default fallback
+};
+
+const formatAmount = (amount: number, currency?: string): string => {
+  const symbol = getCurrencySymbol(currency);
+  return `${symbol}${Number(amount || 0).toLocaleString()}`;
+};
+
+const formatTransactionType = (type?: string): string => {
+  if (!type) return 'N/A';
+  const typeLower = type.toLowerCase();
+  if (typeLower === 'fund') return 'Card Funding';
+  return type.charAt(0).toUpperCase() + type.slice(1);
+};
+
 const storageBucket = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET;
 
 // Build a public download URL for a Firebase Storage path
@@ -88,6 +112,7 @@ export default function UsersPage() {
   const [usersCurrentPage, setUsersCurrentPage] = useState<number>(1);
   const [businessesPageSize, setBusinessesPageSize] = useState<number>(10);
   const [businessesCurrentPage, setBusinessesCurrentPage] = useState<number>(1);
+  const [userDocLinks, setUserDocLinks] = useState<Record<string, string>>({});
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
   const [freezeConfirm, setFreezeConfirm] = useState<string | null>(null);
   const [freezeReason, setFreezeReason] = useState('');
@@ -183,6 +208,41 @@ export default function UsersPage() {
 
     resolveLinks();
   }, [selectedBusiness]);
+
+  // Resolve storage URLs with auth for selected user docs
+  useEffect(() => {
+    const resolveUserLinks = async () => {
+      if (!selectedUser?.requiredDocuments?.length) {
+        setUserDocLinks({});
+        return;
+      }
+
+      const entries = await Promise.all(
+        selectedUser.requiredDocuments!.map(async (doc) => {
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const key = (doc as any).type || (doc as any).anchorId;
+          if (!key) return null;
+
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          const targetPath = (doc as any).storagePath;
+          if (!targetPath) return null;
+
+          try {
+            const url = await getDownloadURL(ref(storage, targetPath));
+            return [key, url] as const;
+          } catch (err) {
+            console.error('Failed to get download URL for user doc', key, err);
+            return null;
+          }
+        })
+      );
+
+      const map = Object.fromEntries(entries.filter(Boolean) as [string, string][]);
+      setUserDocLinks(map);
+    };
+
+    resolveUserLinks();
+  }, [selectedUser]);
 
   // Fetch transactions for selected user
   useEffect(() => {
@@ -950,6 +1010,59 @@ export default function UsersPage() {
                   </div>
                 </div>
 
+                {/* Required Documents */}
+                <div>
+                  <h3 className="text-lg font-semibold text-gray-900 mb-4">Tier 3 Documents</h3>
+                  <div className="space-y-3">
+                    {selectedUser.requiredDocuments?.length ? (
+                      selectedUser.requiredDocuments.map((doc, idx: number) => {
+                        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                        const docAny = doc as any;
+                        return (
+                          <div key={docAny.anchorId || idx} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+                            <div className="flex items-center gap-3 flex-1">
+                              <FileText className="w-5 h-5 text-gray-500" />
+                              <div className="flex-1">
+                                <p className="text-sm font-medium text-gray-900">
+                                  {docAny.type?.replace(/_/g, ' ') || docAny.fileName || 'Document'}
+                                </p>
+                                <p className="text-xs text-gray-500">
+                                  {docAny.description || 'No description'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="flex items-center gap-3">
+                              <span className={`px-2 py-1 text-xs rounded-full font-medium ${
+                                docAny.status === 'approved' 
+                                  ? 'bg-green-100 text-green-800'
+                                  : docAny.status === 'submitted'
+                                  ? 'bg-blue-100 text-blue-800'
+                                  : 'bg-yellow-100 text-yellow-800'
+                              }`}>
+                                {docAny.status || 'Pending'}
+                              </span>
+                              {userDocLinks[docAny.type || docAny.anchorId] && (
+                                <a
+                                  href={userDocLinks[docAny.type || docAny.anchorId]}
+                                  target="_blank"
+                                  rel="noopener noreferrer"
+                                  className="px-3 py-1 text-xs bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+                                >
+                                  View
+                                </a>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <p className="text-sm text-gray-500 text-center py-4">
+                        No documents submitted
+                      </p>
+                    )}
+                  </div>
+                </div>
+
                 {/* Account Status */}
                 <div>
                   <h3 className="text-lg font-semibold text-gray-900 mb-4">Banking Information</h3>
@@ -1004,7 +1117,7 @@ export default function UsersPage() {
                         >
                           <div>
                             <p className="text-sm font-medium text-gray-900 capitalize">
-                              {transaction.type}
+                              {formatTransactionType(transaction.type)}
                             </p>
                             <p className="text-xs text-gray-500">
                               {transaction.date
@@ -1017,8 +1130,8 @@ export default function UsersPage() {
                               transaction.amount && transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
                             }`}
                           >
-                            {transaction.amount && transaction.amount > 0 ? '+' : ''}₦
-                            {Math.abs(transaction.amount || 0).toLocaleString()}
+                            {transaction.amount && transaction.amount > 0 ? '+' : ''}
+                            {formatAmount(Math.abs(transaction.amount || 0), transaction.currency as string)}
                           </p>
                         </div>
                       ))}
@@ -1112,12 +1225,12 @@ export default function UsersPage() {
                 </div>
                 <div>
                   <label className="text-sm text-gray-500">Type</label>
-                  <p className="text-gray-900 font-medium capitalize">{selectedUserTransaction.type}</p>
+                  <p className="text-gray-900 font-medium capitalize">{formatTransactionType(selectedUserTransaction.type)}</p>
                 </div>
                 <div>
                   <label className="text-sm text-gray-500">Amount</label>
                   <p className="text-gray-900 font-medium text-lg">
-                    ₦{Number(selectedUserTransaction.amount || 0).toLocaleString()}
+                    {formatAmount(selectedUserTransaction.amount, (selectedUserTransaction as any).currency)}
                   </p>
                 </div>
                 <div>
@@ -1183,12 +1296,12 @@ export default function UsersPage() {
                 </div>
                 <div>
                   <label className="text-sm text-gray-500">Type</label>
-                  <p className="text-gray-900 font-medium capitalize">{selectedBusinessTransaction.type}</p>
+                  <p className="text-gray-900 font-medium capitalize">{formatTransactionType(selectedBusinessTransaction.type)}</p>
                 </div>
                 <div>
                   <label className="text-sm text-gray-500">Amount</label>
                   <p className="text-gray-900 font-medium text-lg">
-                    ₦{Number(selectedBusinessTransaction.amount || 0).toLocaleString()}
+                    {formatAmount(selectedBusinessTransaction.amount, (selectedBusinessTransaction as any).currency)}
                   </p>
                 </div>
                 <div>
@@ -1434,7 +1547,7 @@ export default function UsersPage() {
                         >
                           <div>
                             <p className="text-sm font-medium text-gray-900 capitalize">
-                              {transaction.type}
+                              {formatTransactionType(transaction.type)}
                             </p>
                             <p className="text-xs text-gray-500">
                               {transaction.date
@@ -1447,8 +1560,8 @@ export default function UsersPage() {
                               transaction.amount && transaction.amount > 0 ? 'text-green-600' : 'text-red-600'
                             }`}
                           >
-                            {transaction.amount && transaction.amount > 0 ? '+' : ''}₦
-                            {Math.abs(transaction.amount || 0).toLocaleString()}
+                            {transaction.amount && transaction.amount > 0 ? '+' : ''}
+                            {formatAmount(Math.abs(transaction.amount || 0), transaction.currency as string)}
                           </p>
                         </div>
                       ))}

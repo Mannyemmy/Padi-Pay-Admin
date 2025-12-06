@@ -13,6 +13,7 @@ import {
   serverTimestamp,
 } from 'firebase/firestore';
 import { User, Transaction, Admin, DashboardStats, Business, AdminRole } from './types';
+import { httpsCallable } from 'firebase/functions';
 
 // USER OPERATIONS
 export async function getUsers() {
@@ -326,6 +327,23 @@ export async function updateUserProfile(
       updatedAt: serverTimestamp(),
     });
 
+    // If email is being updated, also update in Firebase Auth via backend API
+    if (updates.email) {
+      try {
+        const updateUserEmailFn = httpsCallable(
+          getFirebaseFunction(),
+          'updateUserEmail'
+        );
+        await updateUserEmailFn({
+          userId,
+          newEmail: updates.email,
+        });
+      } catch (error) {
+        console.error('Error updating email in auth:', error);
+        // Non-critical error - Firestore update succeeded
+      }
+    }
+
     return { success: true, message: 'Profile updated successfully' };
   } catch (error) {
     console.error('Error updating user profile:', error);
@@ -346,4 +364,8 @@ export async function contactUser(
     console.error('Error contacting user:', error);
     throw error;
   }
+}
+
+function getFirebaseFunction(): import("@firebase/functions").Functions {
+  throw new Error('Function not implemented.');
 }

@@ -53,6 +53,16 @@ export interface User {
     is_active?: boolean;
   };
 
+  // KYC Documents
+  requiredDocuments?: Array<{
+    anchorId?: string;
+    type?: string;
+    description?: string;
+    fileName?: string;
+    status?: 'pending' | 'submitted' | 'approved' | 'rejected';
+    storagePath?: string;
+  }>;
+
   businessIds?: string[];
 }
 

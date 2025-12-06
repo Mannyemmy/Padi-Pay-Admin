@@ -40,6 +40,30 @@ const pickDate = (obj: RawTxn, ...keys: string[]) => {
   return undefined;
 };
 
+const getCurrencySymbol = (currency?: string): string => {
+  if (!currency) return '₦'; // Default to Naira
+  
+  const currencyLower = currency.toLowerCase();
+  if (currencyLower.includes('usd') || currencyLower.includes('dollar')) return '$';
+  if (currencyLower.includes('eur') || currencyLower.includes('euro')) return '€';
+  if (currencyLower.includes('gbp') || currencyLower.includes('pound')) return '£';
+  if (currencyLower.includes('ngn') || currencyLower.includes('naira')) return '₦';
+  
+  return '₦'; // Default fallback
+};
+
+const formatAmount = (amount: number, currency?: string): string => {
+  const symbol = getCurrencySymbol(currency);
+  return `${symbol}${Number(amount || 0).toLocaleString()}`;
+};
+
+const formatTransactionType = (type?: string): string => {
+  if (!type) return 'N/A';
+  const typeLower = type.toLowerCase();
+  if (typeLower === 'fund') return 'Card Funding';
+  return type.charAt(0).toUpperCase() + type.slice(1);
+};
+
 export default function TransactionsPage() {
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -477,12 +501,12 @@ export default function TransactionsPage() {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <span className="inline-flex px-2 py-1 text-xs font-semibold rounded-full badge badge-info capitalize">
-                        {transaction.type}
+                        {formatTransactionType(transaction.type)}
                       </span>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm font-medium text-gray-900 dark:text-gray-100">
-                        ₦{Number(transaction.amount || 0).toLocaleString()}
+                        {formatAmount(transaction.amount, (transaction as any).currency)}
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
@@ -584,13 +608,13 @@ export default function TransactionsPage() {
                 <div>
                   <label className="text-sm text-gray-500">Type</label>
                   <p className="text-gray-900 font-medium capitalize">
-                    {selectedTransaction.type}
+                    {formatTransactionType(selectedTransaction.type)}
                   </p>
                 </div>
                 <div>
                   <label className="text-sm text-gray-500">Amount</label>
                   <p className="text-gray-900 font-medium text-lg">
-                    ₦{Number(selectedTransaction.amount || 0).toLocaleString()}
+                    {formatAmount(selectedTransaction.amount, (selectedTransaction as any).currency)}
                   </p>
                 </div>
                 <div>
@@ -780,7 +804,7 @@ export default function TransactionsPage() {
                                               >
                                                 <div>
                                                   <p className="text-sm font-medium text-gray-900 capitalize">
-                                                    {transaction.type}
+                                                    {formatTransactionType(transaction.type)}
                                                   </p>
                                                   <p className="text-xs text-gray-500">
                                                     {transaction.date

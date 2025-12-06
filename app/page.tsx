@@ -31,6 +31,30 @@ import { Transaction, User } from "@/lib/types";
 type DatePeriod = "today" | "week" | "month" | "year";
 type RawTxn = Record<string, unknown>;
 
+const getCurrencySymbol = (currency?: string): string => {
+  if (!currency) return '₦'; // Default to Naira
+  
+  const currencyLower = currency.toLowerCase();
+  if (currencyLower.includes('usd') || currencyLower.includes('dollar')) return '$';
+  if (currencyLower.includes('eur') || currencyLower.includes('euro')) return '€';
+  if (currencyLower.includes('gbp') || currencyLower.includes('pound')) return '£';
+  if (currencyLower.includes('ngn') || currencyLower.includes('naira')) return '₦';
+  
+  return '₦'; // Default fallback
+};
+
+const formatAmount = (amount: number, currency?: string): string => {
+  const symbol = getCurrencySymbol(currency);
+  return `${symbol}${Number(amount || 0).toLocaleString()}`;
+};
+
+const formatTransactionType = (type?: string): string => {
+  if (!type) return 'N/A';
+  const typeLower = type.toLowerCase();
+  if (typeLower === 'fund') return 'Card Funding';
+  return type.charAt(0).toUpperCase() + type.slice(1);
+};
+
 const pickString = (obj: RawTxn, ...keys: string[]) => {
   for (const key of keys) {
     const v = obj[key];
@@ -366,12 +390,12 @@ export default function DashboardPage() {
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm text-gray-900">
-                      {transaction.type}
+                      {formatTransactionType(transaction.type)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
                     <div className="text-sm font-medium text-gray-900">
-                      ₦{transaction.amount.toLocaleString()}
+                      {formatAmount(transaction.amount, transaction.currency)}
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
