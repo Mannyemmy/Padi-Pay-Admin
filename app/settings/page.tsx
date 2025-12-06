@@ -16,7 +16,7 @@ export default function SettingsPage() {
         primaryColor: '#2563eb',
         accentColor: '#10b981',
         buttonRadius: 12,
-        defaultTheme: 'light',
+        defaultTheme: 'dark',
         compactMode: false,
         enableShadows: true,
       };
@@ -41,7 +41,7 @@ export default function SettingsPage() {
       primaryColor: '#2563eb',
       accentColor: '#10b981',
       buttonRadius: 12,
-      defaultTheme: 'light',
+      defaultTheme: 'dark',
       compactMode: false,
       enableShadows: true,
     };
@@ -54,6 +54,7 @@ export default function SettingsPage() {
     root.style.setProperty('--brand-accent', settings.accentColor);
     root.style.setProperty('--ui-radius', `${settings.buttonRadius}px`);
     root.dataset.theme = settings.defaultTheme;
+    root.classList.toggle('dark', settings.defaultTheme === 'dark');
     root.classList.toggle('ui-compact', settings.compactMode);
     root.classList.toggle('ui-no-shadows', !settings.enableShadows);
   }, [settings]);
