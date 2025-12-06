@@ -120,6 +120,7 @@ export default function DashboardPage() {
             'unknown';
           const status = statusSource.toLowerCase();
           const reference = pickString(raw, 'reference', 'transaction_reference', 'id') || t.id;
+          const currency = pickString(raw, 'currency', 'currencyCode', 'currency_code');
 
           return {
             ...t,
@@ -132,6 +133,7 @@ export default function DashboardPage() {
             type,
             status: status as Transaction['status'],
             reference,
+            currency,
           } as Transaction;
         });
 
@@ -231,6 +233,7 @@ export default function DashboardPage() {
         amount: Number(t.amount) || 0,
         status: t.status,
         date: t.date ? new Date(t.date).toLocaleString() : "N/A",
+        currency: (t as any).currency,
       }));
   }, [transactions, pageSize, currentPage]);
 
