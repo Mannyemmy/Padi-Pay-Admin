@@ -1,4 +1,4 @@
-import { db } from './firebase';
+import { db, auth } from './firebase';
 import {
   collection,
   query,
@@ -12,6 +12,7 @@ import {
   deleteDoc,
   serverTimestamp,
 } from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 import { User, Transaction, Admin, DashboardStats, Business, AdminRole } from './types';
 import { httpsCallable } from 'firebase/functions';
 
@@ -362,6 +363,15 @@ export async function contactUser(
     return { success: true, message: `Message sent via ${channel}` };
   } catch (error) {
     console.error('Error contacting user:', error);
+    throw error;
+  }
+}
+
+export async function logout(): Promise<void> {
+  try {
+    await signOut(auth);
+  } catch (error) {
+    console.error('Error logging out:', error);
     throw error;
   }
 }

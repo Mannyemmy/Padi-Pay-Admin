@@ -8,6 +8,10 @@ admin.initializeApp();
 
 setGlobalOptions({maxInstances: 10});
 
+// Note: Cloud Functions onCall handlers automatically handle CORS
+// for authenticated Firebase clients. All allowed origins are permitted
+// for onCall functions when called from Firebase SDK.
+
 export const createAdminAccount = onCall(async (request) => {
   // Check if the caller is authenticated
   if (!request.auth) {
