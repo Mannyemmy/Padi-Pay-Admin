@@ -52,7 +52,9 @@ export function ToastContainer() {
     };
 
     toastListeners.add(handleNewToast);
-    return () => toastListeners.delete(handleNewToast);
+    return () => {
+      toastListeners.delete(handleNewToast);
+    };
   }, []);
 
   const removeToast = (id: string) => {

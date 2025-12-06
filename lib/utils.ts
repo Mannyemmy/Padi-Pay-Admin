@@ -1,30 +1,16 @@
 import { AdminRole, Permission } from './types';
 
 export const rolePermissions: Record<AdminRole, Permission> = {
-  full_admin: {
+  admin: {
     canViewDashboard: true,
     canManageUsers: true,
     canManageTransactions: true,
     canManageAdmins: true,
     canEditSettings: true,
   },
-  support: {
+  customer_service: {
     canViewDashboard: true,
     canManageUsers: true,
-    canManageTransactions: false,
-    canManageAdmins: false,
-    canEditSettings: false,
-  },
-  finance: {
-    canViewDashboard: true,
-    canManageUsers: false,
-    canManageTransactions: true,
-    canManageAdmins: false,
-    canEditSettings: false,
-  },
-  viewer: {
-    canViewDashboard: true,
-    canManageUsers: false,
     canManageTransactions: false,
     canManageAdmins: false,
     canEditSettings: false,
