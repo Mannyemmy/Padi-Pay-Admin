@@ -13,7 +13,7 @@ export function ThemeProvider() {
         
         // Apply theme
         const root = document.documentElement;
-        root.dataset.theme = settings.defaultTheme || 'light';
+        root.dataset.theme = settings.defaultTheme || 'dark';
         
         // Apply colors
         if (settings.primaryColor) {
@@ -33,9 +33,10 @@ export function ThemeProvider() {
         console.error('Failed to load theme settings:', err);
       }
     } else {
-      // Set default theme
+      // Set default theme to dark
       const root = document.documentElement;
-      root.dataset.theme = 'light';
+      root.dataset.theme = 'dark';
+      root.classList.add('dark');
       root.style.setProperty('--brand-primary', '#2563eb');
       root.style.setProperty('--brand-accent', '#10b981');
       root.style.setProperty('--ui-radius', '12px');
