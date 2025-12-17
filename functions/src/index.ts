@@ -245,3 +245,4 @@ export const updateUserEmail = onCall(async (request) => {
     throw new HttpsError("internal", "Failed to update user email");
   }
 });
+

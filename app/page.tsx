@@ -10,6 +10,7 @@ import {
   Receipt,
   Calendar,
   Loader,
+  Copy,
   ArrowRightLeft,
 } from "lucide-react";
 import StatsCard from "@/components/StatsCard";
@@ -26,6 +27,26 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { getTransactions, getUsers } from "@/lib/firestore";
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '@/lib/firebase';
+
+const FETCH_BALANCE_URL = 'https://us-central1-card-app-829ee.cloudfunctions.net/fetchAccountBalanceHttp';
+
+type AccountBalanceResp = { data?: { availableBalance?: number; ledgerBalance?: number; hold?: number; pending?: number } };
+
+async function fetchAccountBalanceHttp(accountId: string): Promise<AccountBalanceResp> {
+  const url = `${FETCH_BALANCE_URL}`;
+  const res = await fetch(url, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ accountId }),
+  });
+  if (!res.ok) {
+    const text = await res.text().catch(() => '');
+    throw new Error(`Failed to fetch account balance: ${res.status} ${res.statusText} ${text}`);
+  }
+  return res.json();
+}
 import { Transaction, User } from "@/lib/types";
 
 type DatePeriod = "today" | "week" | "month" | "year";
@@ -93,6 +114,13 @@ export default function DashboardPage() {
   const [pageSize, setPageSize] = useState<number>(5);
   const [currentPage, setCurrentPage] = useState<number>(1);
 
+  // Company account balance and transfer details
+  const [companyBalance, setCompanyBalance] = useState<{ availableBalance: number; ledgerBalance: number; hold: number; pending: number } | null>(null);
+  const [companyTransfer, setCompanyTransfer] = useState<{ accountNumber?: string; bankName?: string } | null>(null);
+  const [companyLoading, setCompanyLoading] = useState<boolean>(false);
+  const [companyError, setCompanyError] = useState<string | null>(null);
+  const [copiedAccount, setCopiedAccount] = useState<boolean>(false);
+
   useEffect(() => {
     const load = async () => {
       try {
@@ -139,6 +167,58 @@ export default function DashboardPage() {
 
         setTransactions(normalized);
         setUsers(usersData);
+
+        // Fetch company account details and balance
+        try {
+          const accountRef = doc(db, 'company', 'account_details');
+          const accountSnap = await getDoc(accountRef);
+          console.log('company/account_details exists:', accountSnap.exists(), 'data:', accountSnap.exists() ? accountSnap.data() : null);
+          if (accountSnap.exists()) {
+            const acctData = accountSnap.data() as Record<string, any>;
+            const accountId = acctData?.accountId || acctData?.account_id;
+            const accountNumber = acctData?.accountNumber || acctData?.account_number;
+            const bankName = acctData?.bankName || acctData?.bank_name || acctData?.bank;
+
+            console.log('company account doc', { accountId, accountNumber, bankName });
+
+            setCompanyTransfer({ accountNumber, bankName });
+
+            if (accountId) {
+              setCompanyLoading(true);
+              setCompanyError(null);
+              try {
+                const resp = await fetchAccountBalanceHttp(String(accountId));
+                console.log('fetchAccountBalanceHttp response for accountId', accountId, resp);
+                const d = resp?.data;
+                if (d) {
+                  setCompanyBalance({
+                    availableBalance: Number(d.availableBalance || 0),
+                    ledgerBalance: Number(d.ledgerBalance || 0),
+                    hold: Number(d.hold || 0),
+                    pending: Number(d.pending || 0),
+                  });
+                } else {
+                  setCompanyError('No balance data');
+                }
+              } catch (err) {
+                console.error('Failed to fetch account balance (HTTP) for accountId', accountId, err);
+                setCompanyError('Error fetching balance');
+              } finally {
+                setCompanyLoading(false);
+              }
+            } else {
+              console.warn('No accountId found in company/account_details');
+              setCompanyError('Missing accountId');
+            }
+          } else {
+            console.warn('company/account_details does not exist');
+            setCompanyError('No account details');
+          }
+        } catch (err) {
+          console.error('Failed to load company account details', err);
+          setCompanyError('Failed to load account details');
+        }
+
         setError(null);
       } catch (err) {
         console.error("Failed to load dashboard data", err);
@@ -276,10 +356,48 @@ export default function DashboardPage() {
       ) : (
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
         <StatsCard
-          title="Total Wallet Balance"
-          value={loading ? '...' : `₦${stats.balance.toLocaleString()}`}
+          title="Total Transactions"
+          value={loading ? '...' : stats.transactions}
           icon={<Wallet className="w-6 h-6" />}
           trend={{ value: 12.5, isPositive: true }}
+        />
+
+        {/* Company Wallet Balance Card */}
+        <StatsCard
+          title="Company Wallet"
+          value={loading || companyLoading ? 'Loading...' : companyBalance ? formatAmount(companyBalance.availableBalance) : (companyError ? 'Error' : 'N/A')}
+          icon={<Wallet className="w-6 h-6" />}
+          subtitle={
+            companyTransfer ? (
+              <div className="flex items-center gap-2 text-sm text-gray-500">
+                <span>{companyTransfer.bankName || ''}{companyTransfer.bankName && companyTransfer.accountNumber ? ' • ' : ''}</span>
+                <span className="font-mono">{companyTransfer.accountNumber || ''}</span>
+                {companyTransfer.accountNumber && (
+                  <button
+                    onClick={async () => {
+                      try {
+                        await navigator.clipboard.writeText(String(companyTransfer.accountNumber));
+                        setCopiedAccount(true);
+                        setTimeout(() => setCopiedAccount(false), 2000);
+                        console.log('Copied account number to clipboard');
+                      } catch (err) {
+                        console.error('Failed to copy account number', err);
+                      }
+                    }}
+                    className="ml-1 text-gray-400 hover:text-gray-600"
+                    aria-label="Copy account number"
+                    type="button"
+                  >
+                    <Copy className="w-4 h-4" />
+                  </button>
+                )}
+                {copiedAccount && <span className="text-xs text-green-600 ml-2">Copied</span>}
+                {companyError && <span className="text-xs text-red-600 ml-2">{companyError}</span>}
+              </div>
+            ) : (
+              <span>{loading ? '...' : 'No account'}</span>
+            )
+          }
         />
         <StatsCard
           title="Total Deposits"

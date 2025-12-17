@@ -6,7 +6,7 @@ interface StatsCardProps {
     value: number;
     isPositive: boolean;
   };
-  subtitle?: string;
+  subtitle?: React.ReactNode;
 }
 
 export default function StatsCard({ title, value, icon, trend, subtitle }: StatsCardProps) {
