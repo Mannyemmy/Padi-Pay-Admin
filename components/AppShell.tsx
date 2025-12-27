@@ -12,6 +12,8 @@ const roleAccess: Record<string, Array<'admin' | 'customer_service'>> = {
   '/users/': ['admin', 'customer_service'],
   '/admins': ['admin'],
   '/admins/': ['admin'],
+  '/agents': ['admin'],
+  '/agents/': ['admin'],
   '/transactions': ['admin'],
   '/communications': ['admin', 'customer_service'],
   '/communications/': ['admin', 'customer_service'],
@@ -69,6 +71,26 @@ export default function AppShell({ children }: { children: ReactNode }) {
         <div className="text-center space-y-2">
           <p className="text-lg font-semibold">Role not assigned</p>
           <p className="text-sm text-gray-500">Your account does not have a role yet. Please contact an administrator.</p>
+        </div>
+      </div>
+    );
+  }
+
+  // If an admin profile exists but the `role` field is missing, show a clearer message to help debugging.
+  if (user && admin && !admin.role && !isLogin) {
+    // Helpful console log for debugging in the browser
+    // eslint-disable-next-line no-console
+    console.log('Auth admin without role:', admin);
+
+    return (
+      <div className="flex items-center justify-center min-h-screen bg-gray-50 text-gray-700">
+        <div className="text-center space-y-2">
+          <p className="text-lg font-semibold">Role not assigned</p>
+          <p className="text-sm text-gray-500">
+            Your account has an admin profile but no role assigned. Please contact a super-admin to assign a role.
+            <br />
+            <span className="text-xs text-gray-400">Admin id: {admin.id}</span>
+          </p>
         </div>
       </div>
     );

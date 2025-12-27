@@ -13,7 +13,8 @@ import {
   Menu,
   X,
   ChevronLeft,
-  ChevronRight
+  ChevronRight,
+  HeadphonesIcon,
 } from 'lucide-react';
 import { useState } from 'react';
 import { logout } from '@/lib/firestore';
@@ -21,6 +22,7 @@ import { logout } from '@/lib/firestore';
 const navigation = [
   { name: 'Dashboard', href: '/', icon: LayoutDashboard },
   { name: 'Users', href: '/users', icon: Users },
+  { name: 'Agents', href: '/agents', icon: HeadphonesIcon },
   { name: 'Transactions', href: '/transactions', icon: CreditCard },
   { name: 'Communications', href: '/communications', icon: Megaphone },
   { name: 'Admins', href: '/admins', icon: UserCog },

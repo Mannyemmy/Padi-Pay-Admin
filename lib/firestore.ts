@@ -1,4 +1,4 @@
-import { db, auth } from './firebase';
+import { db, auth, functions } from './firebase';
 import {
   collection,
   query,
@@ -11,9 +11,10 @@ import {
   setDoc,
   deleteDoc,
   serverTimestamp,
+  deleteField,
 } from 'firebase/firestore';
 import { signOut } from 'firebase/auth';
-import { User, Transaction, Admin, DashboardStats, Business, AdminRole } from './types';
+import { User, Transaction, Admin, DashboardStats, Business, AdminRole, Referral } from './types';
 import { httpsCallable } from 'firebase/functions';
 
 // USER OPERATIONS
@@ -39,6 +40,15 @@ export async function getUser(userId: string) {
 export async function updateUserStatus(userId: string, status: 'active' | 'inactive' | 'suspended') {
   const userRef = doc(db, 'users', userId);
   await updateDoc(userRef, { status });
+}
+
+export async function setUserRole(userId: string, role?: string | null) {
+  const userRef = doc(db, 'users', userId);
+  if (role == null) {
+    await updateDoc(userRef, { role: deleteField() });
+  } else {
+    await updateDoc(userRef, { role });
+  }
 }
 
 // TRANSACTION OPERATIONS
@@ -91,6 +101,29 @@ export async function getTransactionsByUser(userId: string) {
       return bd - ad;
     })
     .slice(0, 20);
+}
+
+export async function getReferralsByReferrer(referrerUid: string) {
+  const q = query(collection(db, 'referrals'), where('referrerUid', '==', referrerUid), orderBy('createdAt', 'desc'));
+  const snapshot = await getDocs(q);
+  return snapshot.docs.map((docSnap) => {
+    const data = docSnap.data();
+    return {
+      id: docSnap.id,
+      ...data,
+      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt,
+    } as Referral;
+  });
+}
+
+export async function sendUserNotification(userId: string, title: string, body: string) {
+  try {
+    const callable = httpsCallable(functions, 'sendUserNotification');
+    await callable({ userId, title, body });
+  } catch (err) {
+    console.error('Failed to send user notification:', err);
+    throw err;
+  }
 }
 
 export async function updateTransactionStatus(

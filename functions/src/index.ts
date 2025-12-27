@@ -246,3 +246,127 @@ export const updateUserEmail = onCall(async (request) => {
   }
 });
 
+/**
+ * Send a push notification to a user by device token(s).
+ * Caller must be authenticated and have 'admin' role.
+ * Stores a notification record and queues it if no device token available.
+ */
+export const sendUserNotification = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  // Check that caller is admin
+  const callerDoc = await admin
+    .firestore()
+    .collection("admins")
+    .doc(request.auth.uid)
+    .get();
+
+  if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "Only admins can send notifications");
+  }
+
+  const { userId, title, body } = request.data || {};
+
+  if (!userId || !title || !body) {
+    throw new HttpsError("invalid-argument", "userId, title and body are required");
+  }
+
+  // Load user document to fetch device token
+  const userDocRef = admin.firestore().collection("users").doc(userId);
+  const userDoc = await userDocRef.get();
+
+  if (!userDoc.exists) {
+    throw new HttpsError("not-found", "User not found");
+  }
+
+  const userData = userDoc.data() as any;
+  const deviceToken = userData?.deviceToken;
+
+  // Prepare notification record (persist regardless of delivery)
+  const notificationRecord: Record<string, any> = {
+    userId,
+    title,
+    body,
+    createdAt: admin.firestore.FieldValue.serverTimestamp(),
+    delivered: false,
+  };
+
+  if (!deviceToken) {
+    // Queue notification (no device token)
+    await admin.firestore().collection("notifications").add(notificationRecord);
+    logger.warn(`User ${userId} has no deviceToken; notification queued.`);
+    return { success: false, queued: true, message: "User has no device token; notification queued." };
+  }
+
+  try {
+    const tokens = Array.isArray(deviceToken) ? deviceToken : [deviceToken];
+
+    // Build messages compatible with the current send API
+    const messages = tokens.map((t: string) => ({
+      token: t,
+      notification: {
+        title,
+        body,
+      },
+      data: { userId: String(userId) },
+      android: { priority: 'high' as const },
+      apns: { headers: { "apns-priority": "10" } },
+    }));
+
+    // Send each message with the preferred `send` API and collect results
+    const sendPromises = messages.map((msg) => admin.messaging().send(msg));
+    const results = await Promise.allSettled(sendPromises);
+
+    let successCount = 0;
+    let failureCount = 0;
+    const tokensToRemove: string[] = [];
+
+    results.forEach((res, idx) => {
+      if (res.status === 'fulfilled') {
+        successCount += 1;
+      } else {
+        failureCount += 1;
+        const err = (res as PromiseRejectedResult).reason;
+        logger.error('FCM error for token', tokens[idx], err);
+        const errCode = err?.code || err?.errorInfo?.code || null;
+        if (
+          errCode === 'messaging/invalid-registration-token' ||
+          errCode === 'messaging/registration-token-not-registered'
+        ) {
+          tokensToRemove.push(tokens[idx]);
+        }
+      }
+    });
+
+    if (tokensToRemove.length > 0) {
+      if (Array.isArray(deviceToken)) {
+        const updated = deviceToken.filter((t: string) => !tokensToRemove.includes(t));
+        if (updated.length > 0) {
+          await userDocRef.update({ deviceToken: updated });
+        } else {
+          await userDocRef.update({ deviceToken: admin.firestore.FieldValue.delete() });
+        }
+      } else {
+        // single token invalid -> remove field
+        await userDocRef.update({ deviceToken: admin.firestore.FieldValue.delete() });
+      }
+    }
+
+    // Persist notification record; mark delivered if we had at least one success
+    notificationRecord.delivered = successCount > 0;
+    await admin.firestore().collection("notifications").add(notificationRecord);
+
+    return { success: true, successCount, failureCount };
+  } catch (err: any) {
+    logger.error("Error sending user notification:", err);
+    // Save queued notification with error
+    await admin.firestore().collection("notifications").add({
+      ...notificationRecord,
+      error: String(err),
+    });
+    throw new HttpsError("internal", "Failed to send notification");
+  }
+});
+

@@ -1,10 +1,11 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useSearchParams, useRouter } from 'next/navigation';
 import { Search, X, CheckCircle, FileText, Building2, User as UserIcon, Loader, Edit2, Trash2, Phone, Mail, Lock, Unlock } from 'lucide-react';
 import { ref, getDownloadURL } from 'firebase/storage';
 import { User, Business, Transaction } from '@/lib/types';
-import { getUsers, getBusinesses, getTransactionsByUser, freezeAccount, unFreezeAccount, deleteUser, updateUserProfile, contactUser } from '@/lib/firestore';
+import { getUsers, getBusinesses, getTransactionsByUser, freezeAccount, unFreezeAccount, deleteUser, updateUserProfile, contactUser, getUser } from '@/lib/firestore';
 import { storage } from '@/lib/firebase';
 import { showToast } from '@/components/Toast';
 import { ConfirmModal } from '@/components/ConfirmModal';
@@ -125,6 +126,9 @@ export default function UsersPage() {
   const [actionLoading, setActionLoading] = useState(false);
 
   // Fetch data from Firebase
+  const searchParams = useSearchParams();
+  const router = useRouter();
+
   useEffect(() => {
     const fetchData = async () => {
       try {
@@ -173,6 +177,38 @@ export default function UsersPage() {
 
     fetchData();
   }, []);
+
+  // Open user modal when `?userId=` is provided in URL
+  useEffect(() => {
+    const uid = searchParams.get('userId');
+    if (!uid) return;
+    if (selectedUser?.id === uid) return;
+
+    const existing = users.find((u) => u.id === uid);
+    if (existing) {
+      setSelectedUser(existing);
+      return;
+    }
+
+    (async () => {
+      try {
+        const u = await getUser(uid);
+        if (u) setSelectedUser(u as User);
+      } catch (err) {
+        console.error('Failed to load user from query param:', err);
+      }
+    })();
+  }, [searchParams, users]);
+
+  // Clear query param when modal closes
+  useEffect(() => {
+    if (!selectedUser) {
+      const uid = searchParams.get('userId');
+      if (uid) {
+        router.replace('/users');
+      }
+    }
+  }, [selectedUser]);
 
   // Resolve storage URLs with auth for selected business docs
   useEffect(() => {

@@ -5,6 +5,10 @@ export interface User {
   email: string;
   phone: string;
   status?: "active" | "inactive" | "suspended";
+  role?: 'agent' | string;
+  referralCode?: string;
+  referralCount?: number;
+  referredBy?: string | null;
   bvn?: string;
   nin?: string;
   dateOfBirth?: string;
@@ -230,6 +234,15 @@ export interface Communication {
   status: 'sent' | 'scheduled' | 'draft';
   sentAt?: Date;
   createdBy?: string;
+}
+
+export interface Referral {
+  id: string;
+  referrerUid: string;
+  referrerName?: string;
+  referredUid: string;
+  referredName?: string;
+  createdAt?: Date;
 }
 
 export interface Permission {
