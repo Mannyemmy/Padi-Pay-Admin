@@ -346,13 +346,25 @@ export default function AgentsPage() {
                   <span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${user.status === 'active' ? 'bg-green-100 text-green-800' : 'bg-gray-100 text-gray-800'}`}>{user.status}</span>
                 </div>
 
-                <div className="text-sm text-gray-600">
-                  <div>Email: {user.email}</div>
-                  {user.phone && <div>Phone: {user.phone}</div>}
-                  <div className="flex items-center gap-4">
-                    <div>Referrals: <span className="font-medium">{user.referralCount || 0}</span></div>
-                    <div>Transacting customers: <span className="font-medium">{agentStats[user.id]?.transactingCustomers ?? 0}</span></div>
-                    <div>Referral volume: <span className="font-medium">{agentStats[user.id]?.referralVolume ? ('₦' + Number(agentStats[user.id].referralVolume).toLocaleString()) : '₦0'}</span></div>
+                <div className="text-sm text-gray-600 space-y-2">
+                  <div className="flex flex-col sm:flex-row sm:items-center sm:gap-4">
+                    <div className="text-gray-500">{user.email}</div>
+                    {user.phone && <div className="text-gray-500">{user.phone}</div>}
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
+                    <div className="bg-gray-50 rounded-md px-3 py-2 text-center">
+                      <div className="text-xs text-gray-500">Referrals</div>
+                      <div className="mt-1 font-semibold text-gray-900">{user.referralCount || 0}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-md px-3 py-2 text-center">
+                      <div className="text-xs text-gray-500">Transacting</div>
+                      <div className="mt-1 font-semibold text-gray-900">{agentStats[user.id]?.transactingCustomers ?? 0}</div>
+                    </div>
+                    <div className="bg-gray-50 rounded-md px-3 py-2 text-center">
+                      <div className="text-xs text-gray-500">Referral volume</div>
+                      <div className="mt-1 font-semibold text-gray-900">{agentStats[user.id]?.referralVolume ? ('₦' + Number(agentStats[user.id].referralVolume).toLocaleString()) : '₦0'}</div>
+                    </div>
                   </div>
                 </div>
 
