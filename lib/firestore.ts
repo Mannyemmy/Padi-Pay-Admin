@@ -45,9 +45,15 @@ export async function updateUserStatus(userId: string, status: 'active' | 'inact
 export async function setUserRole(userId: string, role?: string | null) {
   const userRef = doc(db, 'users', userId);
   if (role == null) {
-    await updateDoc(userRef, { role: deleteField() });
+    await updateDoc(userRef, { role: deleteField(), agentAssignedAt: deleteField(), updatedAt: serverTimestamp() });
   } else {
-    await updateDoc(userRef, { role });
+    const updates: Record<string, any> = { role, updatedAt: serverTimestamp() };
+    if (role === 'agent') {
+      updates.agentAssignedAt = serverTimestamp();
+    } else {
+      updates.agentAssignedAt = deleteField();
+    }
+    await updateDoc(userRef, updates);
   }
 }
 
@@ -101,6 +107,23 @@ export async function getTransactionsByUser(userId: string) {
       return bd - ad;
     })
     .slice(0, 20);
+}
+
+export async function getTransactionStatsByUser(userId: string) {
+  const q = query(collection(db, 'transactions'), where('userId', '==', userId));
+  const snapshot = await getDocs(q);
+  let total = 0;
+  let count = 0;
+  snapshot.docs.forEach((docSnap) => {
+    const data = docSnap.data() as Transaction;
+    const amt = typeof data.amount === 'number' ? data.amount : Number(data.amount || 0);
+    // Only count successful transactions to represent actual transacted amount
+    if (data.status === 'success' || data.status === 'successful') {
+      total += amt;
+      count += 1;
+    }
+  });
+  return { total, count };
 }
 
 export async function getReferralsByReferrer(referrerUid: string) {

@@ -365,7 +365,7 @@ export default function DashboardPage() {
         {/* Company Wallet Balance Card */}
         <StatsCard
           title="Company Wallet"
-          value={loading || companyLoading ? 'Loading...' : companyBalance ? formatAmount(companyBalance.availableBalance) : (companyError ? 'Error' : 'N/A')}
+          value={loading || companyLoading ? 'Loading...' : companyBalance ? formatAmount(companyBalance.availableBalance / 100) : (companyError ? 'Error' : 'N/A')}
           icon={<Wallet className="w-6 h-6" />}
           subtitle={
             companyTransfer ? (

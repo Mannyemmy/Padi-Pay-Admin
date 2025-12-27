@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Search, X, ExternalLink, Loader, FileText, CheckCircle, Building2, CreditCard } from 'lucide-react';
 import { Transaction, User, Business } from '@/lib/types';
 import { getTransactions, getUsers, getBusinesses, getTransactionsByUser } from '@/lib/firestore';
+import { ExportMenu } from '@/components/ExportMenu';
 import { Pagination } from '@/components/Pagination';
 import { EmptyState } from '@/components/EmptyState';
 
@@ -289,9 +290,31 @@ export default function TransactionsPage() {
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div>
-        <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Transactions</h1>
-        <p className="text-sm sm:text-base text-gray-500 mt-1">View and manage all transactions</p>
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Transactions</h1>
+          <p className="text-sm sm:text-base text-gray-500 mt-1">View and manage all transactions</p>
+        </div>
+        <div>
+          <ExportMenu
+            data={transactions.map((t) => ({
+              id: t.id,
+              userId: t.userId || (t as any).user_id || '',
+              userName: t.userName || '',
+              type: t.type,
+              amount: t.amount,
+              status: t.status,
+              date: t.date ? new Date(t.date).toISOString() : '',
+              reference: t.reference || '',
+            }))}
+            filenameBase="transactions"
+            title="Transactions Export"
+            renderPrint={(data) => {
+              const rows = data.map((r: any) => `<tr><td>${r.id}</td><td>${r.userName}</td><td>${r.userId}</td><td>${r.type}</td><td>${r.amount}</td><td>${r.status}</td><td>${r.date}</td></tr>`).join('');
+              return `<h1>Transactions</h1><table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>ID</th><th>User</th><th>User ID</th><th>Type</th><th>Amount</th><th>Status</th><th>Date</th></tr></thead><tbody>${rows}</tbody></table>`;
+            }}
+          />
+        </div>
       </div>
 
       {error && (

@@ -2,12 +2,13 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { Search, Plus, X } from 'lucide-react';
+import { Search, Plus, X, User as UserIcon, FileText, Trash2 } from 'lucide-react';
 import { User, Referral } from '@/lib/types';
-import { getUsers, setUserRole, getReferralsByReferrer, getUser, sendUserNotification } from '@/lib/firestore';
+import { getUsers, setUserRole, getReferralsByReferrer, getUser, sendUserNotification, getTransactionStatsByUser } from '@/lib/firestore';
 import { useAuth } from '@/hooks/useAuth';
 import Loading from '@/components/Loading';
 import { showToast } from '@/components/Toast';
+import { ExportMenu } from '@/components/ExportMenu';
 
 export default function AgentsPage() {
   const [users, setUsers] = useState<User[]>([]);
@@ -20,9 +21,53 @@ export default function AgentsPage() {
   const [selectAllInModal, setSelectAllInModal] = useState(false);
   const [showReferralsFor, setShowReferralsFor] = useState<User | null>(null);
   const [referrals, setReferrals] = useState<Referral[]>([]);
+  const [referralTxStats, setReferralTxStats] = useState<Record<string, { total: number; count: number }>>({});
   const [loadingReferrals, setLoadingReferrals] = useState(false);
   const [selectedReferredUser, setSelectedReferredUser] = useState<User | null>(null);
   const [showReferredUserProfile, setShowReferredUserProfile] = useState(false);
+
+  // Agent filters & sorting (moved here so hooks are always called in same order)
+  const [sortBy, setSortBy] = useState<'mostReferrals' | 'mostTransactingCustomers' | 'highestReferralVolume' | 'newest' | 'oldest'>('mostReferrals');
+  const [dateFrom, setDateFrom] = useState<string | null>(null);
+  const [dateTo, setDateTo] = useState<string | null>(null);
+  const [agentStats, setAgentStats] = useState<Record<string, { referralCount: number; transactingCustomers: number; referralVolume: number }>>({});
+
+  // Agent derived data and stats
+  const agents = users.filter((u) => u.role === 'agent');
+
+  const computeAgentStats = async (agentList: User[]) => {
+    const entries = await Promise.all(agentList.map(async (a) => {
+      try {
+        const refs = await getReferralsByReferrer(a.id);
+        const referralCount = refs.length;
+        let transactingCustomers = 0;
+        let referralVolume = 0;
+
+        await Promise.all(refs.map(async (r) => {
+          try {
+            const stats = await getTransactionStatsByUser(r.referredUid);
+            if (stats.count > 0) transactingCustomers += 1;
+            referralVolume += stats.total;
+          } catch {
+            // ignore per referred user errors
+          }
+        }));
+
+        return [a.id, { referralCount, transactingCustomers, referralVolume }] as const;
+      } catch {
+        return [a.id, { referralCount: 0, transactingCustomers: 0, referralVolume: 0 }] as const;
+      }
+    }));
+
+    setAgentStats(Object.fromEntries(entries));
+  };
+
+  useEffect(() => {
+    // Compute stats for agents when agents list changes
+    if (agents.length > 0) {
+      computeAgentStats(agents);
+    }
+  }, [agents]);
 
   const loadUsers = async () => {
     try {
@@ -71,7 +116,7 @@ export default function AgentsPage() {
     );
   }
 
-  const agents = users.filter((u) => u.role === 'agent');
+
 
   const loadReferrals = async (user: User) => {
     try {
@@ -79,6 +124,22 @@ export default function AgentsPage() {
       setLoadingReferrals(true);
       const data = await getReferralsByReferrer(user.id);
       setReferrals(data);
+
+      // Fetch transaction totals for each referred user
+      const totalsMap: Record<string, { total: number; count: number }> = {};
+      await Promise.all(
+        data.map(async (r) => {
+          try {
+            const stats = await getTransactionStatsByUser(r.referredUid);
+            totalsMap[r.referredUid] = stats;
+          } catch (err) {
+            console.error('Failed to load txn stats for', r.referredUid, err);
+            totalsMap[r.referredUid] = { total: 0, count: 0 };
+          }
+        })
+      );
+
+      setReferralTxStats(totalsMap);
     } catch (err) {
       console.error('Failed to load referrals:', err);
       showToast('error', 'Failed', 'Could not load referrals');
@@ -100,11 +161,44 @@ export default function AgentsPage() {
 
   const filteredAgents = agents.filter((u) => {
     const fullName = `${u.firstName || ''} ${u.lastName || ''}`.toLowerCase();
-    return (
+
+    // Search filter
+    const matchesSearch = (
       fullName.includes(searchTerm.toLowerCase()) ||
       u.email?.toLowerCase().includes(searchTerm.toLowerCase()) ||
       u.phone?.includes(searchTerm)
     );
+    if (!matchesSearch) return false;
+
+    // Date filter - use agentAssignedAt if present, fallback to createdAt
+    const assignedVal = (u.agentAssignedAt ?? u.createdAt) as Date | string | undefined;
+    const assigned = assignedVal ? new Date(assignedVal) : null;
+    if (dateFrom) {
+      const from = new Date(dateFrom);
+      if (!assigned || assigned < from) return false;
+    }
+    if (dateTo) {
+      const to = new Date(dateTo);
+      if (!assigned || assigned > to) return false;
+    }
+
+    return true;
+  });
+
+  const getAssignedDate = (u: User) => {
+    const val = (u.agentAssignedAt ?? u.createdAt) as Date | string | undefined;
+    return val ? new Date(val) : new Date(0);
+  };
+
+  const sortedAgents = [...filteredAgents].sort((a, b) => {
+    const aStats = agentStats[a.id] || { referralCount: 0, transactingCustomers: 0, referralVolume: 0 };
+    const bStats = agentStats[b.id] || { referralCount: 0, transactingCustomers: 0, referralVolume: 0 };
+
+    if (sortBy === 'mostReferrals') return bStats.referralCount - aStats.referralCount;
+    if (sortBy === 'mostTransactingCustomers') return bStats.transactingCustomers - aStats.transactingCustomers;
+    if (sortBy === 'highestReferralVolume') return bStats.referralVolume - aStats.referralVolume;
+    if (sortBy === 'newest') return getAssignedDate(b).getTime() - getAssignedDate(a).getTime();
+    return getAssignedDate(a).getTime() - getAssignedDate(b).getTime();
   });
 
   const handleRemoveAgent = async (userId: string) => {
@@ -155,24 +249,76 @@ export default function AgentsPage() {
           <h1 className="text-3xl font-bold text-gray-900">Agents</h1>
           <p className="text-gray-500 mt-1">Manage agent users</p>
         </div>
-        <div className="flex items-center gap-3">
-          <div className="relative">
-            <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+      </div>
+
+      <div className="space-y-3">
+        <div className="relative">
+          <Search className="absolute left-3 top-1/2 transform -translate-y-1/2 text-gray-400 w-5 h-5" />
+          <input
+            type="text"
+            placeholder="Search by name, email or phone..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+          />
+        </div>
+
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <select
+              value={sortBy}
+              onChange={(e) => setSortBy(e.target.value as 'mostReferrals' | 'mostTransactingCustomers' | 'highestReferralVolume' | 'newest' | 'oldest')}
+              className="py-2 px-3 border border-gray-300 rounded-lg"
+            >
+              <option value="mostReferrals">Most referrals</option>
+              <option value="mostTransactingCustomers">Most transacting customers</option>
+              <option value="highestReferralVolume">Highest referral volume</option>
+              <option value="newest">Newest</option>
+              <option value="oldest">Oldest</option>
+            </select>
+
             <input
-              type="text"
-              placeholder="Search by name, email or phone..."
-              value={searchTerm}
-              onChange={(e) => setSearchTerm(e.target.value)}
-              className="pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+              type="date"
+              value={dateFrom || ''}
+              onChange={(e) => setDateFrom(e.target.value || null)}
+              className="py-2 px-3 border border-gray-300 rounded-lg"
+            />
+            <input
+              type="date"
+              value={dateTo || ''}
+              onChange={(e) => setDateTo(e.target.value || null)}
+              className="py-2 px-3 border border-gray-300 rounded-lg"
             />
           </div>
-          <button
-            onClick={() => setShowAddModal(true)}
-            className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
-          >
-            <Plus className="w-4 h-4" />
-            Add Agent
-          </button>
+
+          <div className="flex items-center gap-2">
+            <ExportMenu
+              data={sortedAgents.map((u) => ({
+                id: u.id,
+                name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+                email: u.email,
+                phone: u.phone,
+                referralCount: u.referralCount || 0,
+                transactingCustomers: agentStats[u.id]?.transactingCustomers || 0,
+                referralVolume: agentStats[u.id]?.referralVolume || 0,
+                agentAssignedAt: getAssignedDate(u).toISOString(),
+              }))}
+              filenameBase="agents"
+              title="Agents Export"
+              renderPrint={(data) => {
+                const rows = (data as Record<string, unknown>[]).map((r) => `<tr><td>${String(r.id ?? '')}</td><td>${String(r.name ?? '')}</td><td>${String(r.email ?? '')}</td><td>${String(r.phone ?? '')}</td><td>${String(r.referralCount ?? 0)}</td><td>${String(r.transactingCustomers ?? 0)}</td><td>₦${Number((r.referralVolume as number) || 0).toLocaleString()}</td></tr>`).join('');
+                return `<h1>Agents</h1><table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Referral Count</th><th>Transacting Customers</th><th>Referral Volume</th></tr></thead><tbody>${rows}</tbody></table>`;
+              }}
+            />
+
+            <button
+              onClick={() => setShowAddModal(true)}
+              className="flex items-center gap-2 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors"
+            >
+              <Plus className="w-4 h-4" />
+              Add Agent
+            </button>
+          </div>
         </div>
       </div>
 
@@ -185,7 +331,7 @@ export default function AgentsPage() {
               No agents found. Use Add Agent to assign users as agents.
             </div>
           ) : (
-            filteredAgents.map((user) => (
+            sortedAgents.map((user) => (
               <div key={user.id} className="bg-white rounded-lg border border-gray-200 p-6 space-y-4">
                 <div className="flex items-start justify-between">
                   <div className="flex items-center gap-3">
@@ -203,25 +349,46 @@ export default function AgentsPage() {
                 <div className="text-sm text-gray-600">
                   <div>Email: {user.email}</div>
                   {user.phone && <div>Phone: {user.phone}</div>}
-                  <div>Referrals: <span className="font-medium">{user.referralCount || 0}</span></div>
+                  <div className="flex items-center gap-4">
+                    <div>Referrals: <span className="font-medium">{user.referralCount || 0}</span></div>
+                    <div>Transacting customers: <span className="font-medium">{agentStats[user.id]?.transactingCustomers ?? 0}</span></div>
+                    <div>Referral volume: <span className="font-medium">{agentStats[user.id]?.referralVolume ? ('₦' + Number(agentStats[user.id].referralVolume).toLocaleString()) : '₦0'}</span></div>
+                  </div>
                 </div>
 
-                <div className="flex gap-2">
-                  <button
-                    onClick={() => loadReferrals(user)}
-                    disabled={actionLoading}
-                    className="py-2 px-3 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
-                  >
-                    View Referrals
-                  </button>
+                <div className="flex items-center justify-between w-full">
+                  <div className="flex items-center gap-2">
+                    <button
+                      onClick={() => router.push(`/users?userId=${user.id}`)}
+                      className="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+                      title="View profile"
+                    >
+                      <UserIcon className="w-4 h-4" />
+                      <span>View</span>
+                    </button>
 
-                  <button
-                    onClick={() => handleRemoveAgent(user.id)}
-                    disabled={actionLoading}
-                    className="flex-1 py-2 px-4 border border-red-200 text-red-700 rounded-lg text-sm hover:bg-red-50"
-                  >
-                    Remove Agent
-                  </button>
+                    <button
+                      onClick={() => loadReferrals(user)}
+                      disabled={actionLoading}
+                      className="inline-flex items-center gap-2 px-3 py-2 border border-gray-200 rounded-lg text-sm hover:bg-gray-50"
+                      title="View referrals"
+                    >
+                      <FileText className="w-4 h-4" />
+                      <span>Referrals</span>
+                    </button>
+                  </div>
+
+                  <div>
+                    <button
+                      onClick={() => handleRemoveAgent(user.id)}
+                      disabled={actionLoading}
+                      className="inline-flex items-center gap-2 px-3 py-2 bg-red-50 text-red-700 border border-red-200 rounded-lg text-sm hover:bg-red-100"
+                      title="Remove agent"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      <span>Remove</span>
+                    </button>
+                  </div>
                 </div>
               </div>
             ))
@@ -362,29 +529,38 @@ export default function AgentsPage() {
                       </div>
                     </div>
 
-                    <div className="flex items-center gap-2">                      <button
+                    <div className="flex items-center gap-2">
+                      <button
                         onClick={() => {
                           setShowAddModal(false);
                           router.push(`/users?userId=${u.id}`);
                         }}
-                        className="py-1 px-3 border border-gray-200 rounded-md text-sm hover:bg-gray-50"
+                        className="inline-flex items-center gap-2 px-2 py-1 border border-gray-200 rounded-md text-sm hover:bg-gray-50"
+                        title="View profile"
                       >
-                        View
-                      </button>                      {u.role === 'agent' ? (
+                        <UserIcon className="w-4 h-4" />
+                        <span>View</span>
+                      </button>
+
+                      {u.role === 'agent' ? (
                         <button
                           onClick={() => handleRemoveAgent(u.id)}
                           disabled={actionLoading}
-                          className="py-1 px-3 border border-red-200 text-red-700 rounded-md text-sm hover:bg-red-50"
+                          className="inline-flex items-center gap-2 px-2 py-1 border border-red-200 text-red-700 rounded-md text-sm hover:bg-red-50"
+                          title="Remove agent"
                         >
-                          Remove
+                          <Trash2 className="w-4 h-4" />
+                          <span>Remove</span>
                         </button>
                       ) : (
                         <button
                           onClick={() => handleAddAgent(u.id)}
                           disabled={actionLoading}
-                          className="py-1 px-3 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                          className="inline-flex items-center gap-2 px-2 py-1 bg-blue-600 text-white rounded-md text-sm hover:bg-blue-700"
+                          title="Add as agent"
                         >
-                          Add
+                          <Plus className="w-4 h-4" />
+                          <span>Add</span>
                         </button>
                       )}
                     </div>
@@ -421,6 +597,7 @@ export default function AgentsPage() {
                     <div>
                       <div className="font-medium">{r.referredName || r.referredUid}</div>
                       <div className="text-sm text-gray-500">{r.referredUid} • {r.createdAt ? new Date(r.createdAt).toLocaleString() : ''}</div>
+                      <div className="text-sm text-gray-500">Transactions: <span className="font-medium">{referralTxStats[r.referredUid]?.count || 0} tx • {referralTxStats[r.referredUid] ? ('₦' + Number(referralTxStats[r.referredUid].total || 0).toLocaleString()) : '₦0'}</span></div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button

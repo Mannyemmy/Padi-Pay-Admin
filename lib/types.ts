@@ -9,6 +9,7 @@ export interface User {
   referralCode?: string;
   referralCount?: number;
   referredBy?: string | null;
+  agentAssignedAt?: Date;
   bvn?: string;
   nin?: string;
   dateOfBirth?: string;

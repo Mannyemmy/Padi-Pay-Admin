@@ -9,6 +9,7 @@ import { getUsers, getBusinesses, getTransactionsByUser, freezeAccount, unFreeze
 import { storage } from '@/lib/firebase';
 import { showToast } from '@/components/Toast';
 import { ConfirmModal } from '@/components/ConfirmModal';
+import { ExportMenu } from '@/components/ExportMenu';
 
 type TabType = 'users' | 'businesses';
 
@@ -518,9 +519,34 @@ export default function UsersPage() {
     <div className="space-y-6">
       {/* Header */}
       <div className="flex flex-col gap-3">
-        <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Users & Businesses</h1>
-          <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mt-1">Manage all registered users and businesses</p>
+        <div className="flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Users & Businesses</h1>
+            <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mt-1">Manage all registered users and businesses</p>
+          </div>
+          <div className="flex items-center gap-3">
+            {/* Export buttons */}
+            <ExportMenu
+              data={users.map(u => ({
+                id: u.id,
+                name: `${u.firstName || ''} ${u.lastName || ''}`.trim(),
+                email: u.email,
+                phone: u.phone,
+                role: u.role || '',
+                referralCode: u.referralCode || '',
+                referralCount: u.referralCount || 0,
+                status: u.status || '',
+                createdAt: u.createdAt ? new Date(u.createdAt).toISOString() : '',
+                agentAssignedAt: (u as any).agentAssignedAt ? new Date((u as any).agentAssignedAt).toISOString() : '',
+              }))}
+              filenameBase="users"
+              title="Users Export"
+              renderPrint={(data) => {
+                const rows = data.map((r: any) => `<tr><td>${r.id}</td><td>${r.name}</td><td>${r.email}</td><td>${r.phone || ''}</td><td>${r.role}</td><td>${r.referralCount}</td><td>${r.status}</td></tr>`).join('');
+                return `<h1>Users</h1><table border="1" cellpadding="6" cellspacing="0"><thead><tr><th>ID</th><th>Name</th><th>Email</th><th>Phone</th><th>Role</th><th>Referral Count</th><th>Status</th></tr></thead><tbody>${rows}</tbody></table>`;
+              }}
+            />
+          </div>
         </div>
       </div>
 
