@@ -17,7 +17,7 @@ export default function StatsCard({ title, value, icon, trend, subtitle }: Stats
           <p className="text-sm font-medium text-gray-600 dark:text-gray-400">{title}</p>
           <p className="text-2xl font-bold text-gray-900 dark:text-gray-100 mt-2">{value}</p>
           {subtitle && (
-            <p className="text-sm text-gray-500 dark:text-gray-400 mt-1">{subtitle}</p>
+            <div className="text-sm text-gray-500 dark:text-gray-400 mt-1">{subtitle}</div>
           )}
           {trend && (
             <div className="flex items-center gap-1 mt-2">

@@ -1,13 +1,13 @@
-'use client';
+"use client";
 
-import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { 
-  LayoutDashboard, 
-  Users, 
-  CreditCard, 
+import Link from "next/link";
+import { usePathname, useRouter } from "next/navigation";
+import {
+  LayoutDashboard,
+  Users,
+  CreditCard,
   Megaphone,
-  UserCog, 
+  UserCog,
   Settings,
   LogOut,
   Menu,
@@ -15,18 +15,21 @@ import {
   ChevronLeft,
   ChevronRight,
   HeadphonesIcon,
-} from 'lucide-react';
-import { useState } from 'react';
-import { logout } from '@/lib/firestore';
+  icons,
+} from "lucide-react";
+import { useState } from "react";
+import { logout } from "@/lib/firestore";
 
 const navigation = [
-  { name: 'Dashboard', href: '/', icon: LayoutDashboard },
-  { name: 'Users', href: '/users', icon: Users },
-  { name: 'Agents', href: '/agents', icon: HeadphonesIcon },
-  { name: 'Transactions', href: '/transactions', icon: CreditCard },
-  { name: 'Communications', href: '/communications', icon: Megaphone },
-  { name: 'Admins', href: '/admins', icon: UserCog },
-  { name: 'Settings', href: '/settings', icon: Settings },
+  { name: "Dashboard", href: "/", icon: LayoutDashboard },
+  { name: "Users", href: "/users", icon: Users },
+  { name: "Agents", href: "/agents", icon: HeadphonesIcon },
+  { name: "Transactions", href: "/transactions", icon: CreditCard },
+  { name: "Referrals", href: "/referrals", icon: icons.Link },
+  { name: "Communications", href: "/communications", icon: Megaphone },
+  { name: "Seo", href: "/seo", icon: icons.Globe },
+  { name: "Admins", href: "/admins", icon: UserCog },
+  { name: "Settings", href: "/settings", icon: Settings },
 ];
 
 export default function Sidebar() {
@@ -38,9 +41,9 @@ export default function Sidebar() {
   const handleLogout = async () => {
     try {
       await logout();
-      router.push('/login');
+      router.push("/login");
     } catch (error) {
-      console.error('Logout failed:', error);
+      console.error("Logout failed:", error);
     }
   };
 
@@ -51,7 +54,11 @@ export default function Sidebar() {
         onClick={() => setIsMobileMenuOpen(!isMobileMenuOpen)}
         className="lg:hidden fixed top-4 left-4 z-50 p-3 rounded-lg bg-white dark:bg-gray-800 shadow-lg hover:shadow-xl transition-shadow"
       >
-        {isMobileMenuOpen ? <X className="w-6 h-6 text-gray-900 dark:text-gray-100" /> : <Menu className="w-6 h-6 text-gray-900 dark:text-gray-100" />}
+        {isMobileMenuOpen ? (
+          <X className="w-6 h-6 text-gray-900 dark:text-gray-100" />
+        ) : (
+          <Menu className="w-6 h-6 text-gray-900 dark:text-gray-100" />
+        )}
       </button>
 
       {/* Overlay */}
@@ -67,36 +74,64 @@ export default function Sidebar() {
         className={`
           fixed lg:static inset-y-0 left-0 z-40
           transform transition-all duration-300 ease-in-out
-          ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-          ${isCollapsed ? 'lg:w-20' : 'lg:w-64'} w-64
+          ${
+            isMobileMenuOpen
+              ? "translate-x-0"
+              : "-translate-x-full lg:translate-x-0"
+          }
+          ${isCollapsed ? "lg:w-20" : "lg:w-64"} w-64
         `}
         style={{
-          backgroundColor: 'var(--sidebar-bg)',
-          color: 'var(--sidebar-text)',
-          borderRightColor: 'var(--sidebar-border)',
-          borderRightWidth: '1px',
+          backgroundColor: "var(--sidebar-bg)",
+          color: "var(--sidebar-text)",
+          borderRightColor: "var(--sidebar-border)",
+          borderRightWidth: "1px",
         }}
       >
         <div className="flex flex-col h-full">
           {/* Logo & Collapse Button */}
-          <div className="p-6 flex items-center justify-between" style={{ borderBottomColor: 'var(--sidebar-border)', borderBottomWidth: '1px' }}>
+          <div
+            className="p-6 flex items-center justify-between"
+            style={{
+              borderBottomColor: "var(--sidebar-border)",
+              borderBottomWidth: "1px",
+            }}
+          >
             {!isCollapsed && (
               <>
                 <div>
-                  <h1 className="text-2xl font-bold" style={{ color: 'var(--brand-primary)' }}>PadiPay</h1>
-                  <p className="text-sm" style={{ color: 'var(--sidebar-text-secondary)' }}>Admin</p>
+                  <h1
+                    className="text-2xl font-bold"
+                    style={{ color: "var(--brand-primary)" }}
+                  >
+                    PadiPay
+                  </h1>
+                  <p
+                    className="text-sm"
+                    style={{ color: "var(--sidebar-text-secondary)" }}
+                  >
+                    Admin
+                  </p>
                 </div>
               </>
             )}
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className="hidden lg:flex p-2 rounded-lg transition-colors"
-              style={{ color: 'var(--sidebar-text)' }}
-              onMouseEnter={(e) => e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)'}
-              onMouseLeave={(e) => e.currentTarget.style.backgroundColor = 'transparent'}
-              title={isCollapsed ? 'Expand' : 'Collapse'}
+              style={{ color: "var(--sidebar-text)" }}
+              onMouseEnter={(e) =>
+                (e.currentTarget.style.backgroundColor = "var(--sidebar-hover)")
+              }
+              onMouseLeave={(e) =>
+                (e.currentTarget.style.backgroundColor = "transparent")
+              }
+              title={isCollapsed ? "Expand" : "Collapse"}
             >
-              {isCollapsed ? <ChevronRight className="w-5 h-5" /> : <ChevronLeft className="w-5 h-5" />}
+              {isCollapsed ? (
+                <ChevronRight className="w-5 h-5" />
+              ) : (
+                <ChevronLeft className="w-5 h-5" />
+              )}
             </button>
           </div>
 
@@ -114,17 +149,24 @@ export default function Sidebar() {
                     transition-colors duration-200
                   `}
                   style={{
-                    backgroundColor: isActive ? 'var(--sidebar-active-bg)' : 'transparent',
-                    color: isActive ? 'var(--brand-primary)' : 'var(--sidebar-text)',
-                    fontWeight: isActive ? '500' : '400',
+                    backgroundColor: isActive
+                      ? "var(--sidebar-active-bg)"
+                      : "transparent",
+                    color: isActive
+                      ? "var(--brand-primary)"
+                      : "var(--sidebar-text)",
+                    fontWeight: isActive ? "500" : "400",
                   }}
                   onMouseEnter={(e) => {
-                    if (!isActive) e.currentTarget.style.backgroundColor = 'var(--sidebar-hover)';
+                    if (!isActive)
+                      e.currentTarget.style.backgroundColor =
+                        "var(--sidebar-hover)";
                   }}
                   onMouseLeave={(e) => {
-                    if (!isActive) e.currentTarget.style.backgroundColor = 'transparent';
+                    if (!isActive)
+                      e.currentTarget.style.backgroundColor = "transparent";
                   }}
-                  title={isCollapsed ? item.name : ''}
+                  title={isCollapsed ? item.name : ""}
                 >
                   <item.icon className="w-5 h-5 flex-shrink-0" />
                   {!isCollapsed && <span>{item.name}</span>}
@@ -141,15 +183,19 @@ export default function Sidebar() {
                   <span className="text-blue-600 font-semibold">A</span>
                 </div>
                 <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">Admin User</p>
+                  <p className="text-sm font-medium text-gray-900">
+                    Admin User
+                  </p>
                   <p className="text-xs text-gray-500">admin@padipay.com</p>
                 </div>
               </div>
             )}
             <button
               onClick={handleLogout}
-              className={`w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors ${isCollapsed ? 'justify-center' : ''}`}
-              title={isCollapsed ? 'Logout' : ''}
+              className={`w-full flex items-center gap-3 px-4 py-3 text-red-600 hover:bg-red-50 rounded-lg transition-colors ${
+                isCollapsed ? "justify-center" : ""
+              }`}
+              title={isCollapsed ? "Logout" : ""}
             >
               <LogOut className="w-5 h-5 flex-shrink-0" />
               {!isCollapsed && <span>Logout</span>}
