@@ -1,6 +1,6 @@
-'use client';
+"use client";
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from "react";
 import {
   Search,
   X,
@@ -12,7 +12,7 @@ import {
   Copy,
   CheckCircle,
   Edit2,
-} from 'lucide-react';
+} from "lucide-react";
 import {
   collection,
   query,
@@ -23,12 +23,12 @@ import {
   updateDoc,
   serverTimestamp,
   where,
-} from 'firebase/firestore';
-import { db } from '@/lib/firebase';
-import { User } from '@/lib/types';
-import { ExportMenu } from '@/components/ExportMenu';
-import { Pagination } from '@/components/Pagination';
-import { EmptyState } from '@/components/EmptyState';
+} from "firebase/firestore";
+import { db } from "@/lib/firebase";
+import { User } from "@/lib/types";
+import { ExportMenu } from "@/components/ExportMenu";
+import { Pagination } from "@/components/Pagination";
+import { EmptyState } from "@/components/EmptyState";
 
 interface ReferralStats {
   totalReferrals: number;
@@ -47,7 +47,7 @@ export default function ReferralsAdminPage() {
   const [users, setUsers] = useState<ReferralUser[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState('');
+  const [searchTerm, setSearchTerm] = useState("");
   const [selectedUser, setSelectedUser] = useState<ReferralUser | null>(null);
   const [referralBonus, setReferralBonus] = useState<number>(500); // Default ₦500 per referral
   const [updatingBonus, setUpdatingBonus] = useState(false);
@@ -58,7 +58,7 @@ export default function ReferralsAdminPage() {
   });
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
-  const [copiedCode, setCopiedCode] = useState<string>('');
+  const [copiedCode, setCopiedCode] = useState<string>("");
 
   // New states for editing earnings
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
@@ -71,7 +71,9 @@ export default function ReferralsAdminPage() {
       try {
         setLoading(true);
 
-        const usersSnapshot = await getDocs(query(collection(db, 'users'), orderBy('createdAt', 'desc')));
+        const usersSnapshot = await getDocs(
+          query(collection(db, "users"), orderBy("createdAt", "desc")),
+        );
         const usersData: ReferralUser[] = [];
 
         let totalRefs = 0;
@@ -86,18 +88,20 @@ export default function ReferralsAdminPage() {
           const referralCount = referrals.length;
 
           // Use stored custom earnings if exists, otherwise calculate
-          const customEarnings = data.customReferralEarnings as number | undefined;
+          const customEarnings = data.customReferralEarnings as
+            | number
+            | undefined;
           const earningsPerReferral = data.referralBonus || referralBonus;
           const calculatedEarnings = referralCount * earningsPerReferral;
           const referralEarnings = customEarnings ?? calculatedEarnings;
 
           usersData.push({
             id: uid,
-            firstName: data.firstName || '',
-            lastName: data.lastName || '',
-            email: data.email || '',
-            phone: data.phone || '',
-            userName: data.userName || '',
+            firstName: data.firstName || "",
+            lastName: data.lastName || "",
+            email: data.email || "",
+            phone: data.phone || "",
+            userName: data.userName || "",
             createdAt: data.createdAt?.toDate() || new Date(),
             referralCount,
             referralEarnings,
@@ -115,8 +119,8 @@ export default function ReferralsAdminPage() {
           pendingEarnings: 0,
         });
       } catch (err) {
-        console.error('Failed to load referral data', err);
-        setError('Failed to load referral data');
+        console.error("Failed to load referral data", err);
+        setError("Failed to load referral data");
       } finally {
         setLoading(false);
       }
@@ -133,7 +137,7 @@ export default function ReferralsAdminPage() {
       setUpdatingBonus(true);
       alert(`Referral bonus updated to ₦${referralBonus}`);
     } catch (err) {
-      alert('Failed to update bonus');
+      alert("Failed to update bonus");
     } finally {
       setUpdatingBonus(false);
     }
@@ -142,7 +146,7 @@ export default function ReferralsAdminPage() {
   const copyReferralCode = (code: string) => {
     navigator.clipboard.writeText(code.toLowerCase());
     setCopiedCode(code);
-    setTimeout(() => setCopiedCode(''), 2000);
+    setTimeout(() => setCopiedCode(""), 2000);
   };
 
   // Start editing earnings for a user
@@ -163,7 +167,7 @@ export default function ReferralsAdminPage() {
 
     try {
       setSavingEarnings(true);
-      const userRef = doc(db, 'users', userId);
+      const userRef = doc(db, "users", userId);
       await updateDoc(userRef, {
         customReferralEarnings: newEarnings,
         updatedAt: serverTimestamp(),
@@ -172,20 +176,23 @@ export default function ReferralsAdminPage() {
       // Update local state
       setUsers((prev) =>
         prev.map((u) =>
-          u.id === userId ? { ...u, referralEarnings: newEarnings } : u
-        )
+          u.id === userId ? { ...u, referralEarnings: newEarnings } : u,
+        ),
       );
 
       // Update global stats
       setGlobalStats((prev) => ({
         ...prev,
-        totalEarnings: prev.totalEarnings + (newEarnings - users.find(u => u.id === userId)?.referralEarnings || 0),
+        totalEarnings:
+          prev.totalEarnings +
+          (newEarnings -
+            (users.find((u) => u.id === userId)?.referralEarnings ?? 0)),
       }));
 
       setEditingUserId(null);
     } catch (err) {
-      console.error('Failed to update earnings', err);
-      alert('Failed to save earnings');
+      console.error("Failed to update earnings", err);
+      alert("Failed to save earnings");
     } finally {
       setSavingEarnings(false);
     }
@@ -216,7 +223,9 @@ export default function ReferralsAdminPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">Referrals Management</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900">
+            Referrals Management
+          </h1>
           <p className="text-sm sm:text-base text-gray-500 mt-1">
             Manage referral program, view stats, and adjust rewards
           </p>
@@ -224,7 +233,9 @@ export default function ReferralsAdminPage() {
       </div>
 
       {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">{error}</div>
+        <div className="bg-red-50 border border-red-200 text-red-700 rounded-lg p-4">
+          {error}
+        </div>
       )}
 
       {/* Global Stats */}
@@ -233,7 +244,9 @@ export default function ReferralsAdminPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-blue-100">Total Referrals</p>
-              <p className="text-3xl font-bold mt-2">{globalStats.totalReferrals}</p>
+              <p className="text-3xl font-bold mt-2">
+                {globalStats.totalReferrals}
+              </p>
             </div>
             <Users className="w-12 h-12 opacity-80" />
           </div>
@@ -243,7 +256,9 @@ export default function ReferralsAdminPage() {
           <div className="flex items-center justify-between">
             <div>
               <p className="text-green-100">Total Earnings Paid</p>
-              <p className="text-3xl font-bold mt-2">₦{globalStats.totalEarnings.toLocaleString()}</p>
+              <p className="text-3xl font-bold mt-2">
+                ₦{globalStats.totalEarnings.toLocaleString()}
+              </p>
             </div>
             <DollarSign className="w-12 h-12 opacity-80" />
           </div>
@@ -266,7 +281,7 @@ export default function ReferralsAdminPage() {
                   disabled={updatingBonus}
                   className="px-4 py-2 bg-white text-purple-600 rounded-lg font-medium hover:bg-white/90 transition"
                 >
-                  {updatingBonus ? 'Saving...' : 'Update'}
+                  {updatingBonus ? "Saving..." : "Update"}
                 </button>
               </div>
             </div>
@@ -298,7 +313,7 @@ export default function ReferralsAdminPage() {
             phone: u.phone,
             referralCount: u.referralCount,
             earnings: u.referralEarnings,
-            joined: u.createdAt.toISOString(),
+           joined: u.createdAt?.toISOString() ?? '',
           }))}
           filenameBase="referrals"
           title="Referrals Export"
@@ -345,20 +360,27 @@ export default function ReferralsAdminPage() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {paginatedUsers.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50 transition-colors">
+                    <tr
+                      key={user.id}
+                      className="hover:bg-gray-50 transition-colors"
+                    >
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="text-sm font-medium text-gray-900">
                           {user.firstName} {user.lastName}
                         </div>
-                        <div className="text-xs text-gray-500">{user.email || user.phone}</div>
+                        <div className="text-xs text-gray-500">
+                          {user.email || user.phone}
+                        </div>
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap">
                         <div className="flex items-center gap-2">
                           <code className="text-sm font-mono px-2 py-1 rounded">
-                            {user.userName?.toUpperCase() || 'N/A'}
+                            {user.userName?.toUpperCase() || "N/A"}
                           </code>
                           <button
-                            onClick={() => copyReferralCode(user.userName || '')}
+                            onClick={() =>
+                              copyReferralCode(user.userName || "")
+                            }
                             className="text-gray-500 hover:text-gray-700"
                           >
                             {copiedCode === user.userName ? (
@@ -378,7 +400,9 @@ export default function ReferralsAdminPage() {
                             <input
                               type="number"
                               value={newEarnings}
-                              onChange={(e) => setNewEarnings(Number(e.target.value))}
+                              onChange={(e) =>
+                                setNewEarnings(Number(e.target.value))
+                              }
                               className="w-32 px-3 py-1 border border-gray-300 rounded text-sm"
                               autoFocus
                             />
@@ -387,7 +411,11 @@ export default function ReferralsAdminPage() {
                               disabled={savingEarnings}
                               className="text-green-600 hover:text-green-800"
                             >
-                              {savingEarnings ? <Loader className="w-4 h-4 animate-spin" /> : <CheckCircle className="w-4 h-4" />}
+                              {savingEarnings ? (
+                                <Loader className="w-4 h-4 animate-spin" />
+                              ) : (
+                                <CheckCircle className="w-4 h-4" />
+                              )}
                             </button>
                             <button
                               onClick={cancelEditEarnings}
@@ -411,7 +439,7 @@ export default function ReferralsAdminPage() {
                         )}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
-                        {user.createdAt.toLocaleDateString()}
+                        {user.createdAt?.toLocaleDateString()??''}
                       </td>
                       <td className="px-6 py-4 whitespace-nowrap text-right">
                         <button
@@ -446,10 +474,16 @@ export default function ReferralsAdminPage() {
                   </select>
                 </label>
                 <span className="text-sm text-gray-600">
-                  Showing {(currentPage - 1) * pageSize + 1}-{Math.min(currentPage * pageSize, filteredUsers.length)} of {filteredUsers.length}
+                  Showing {(currentPage - 1) * pageSize + 1}-
+                  {Math.min(currentPage * pageSize, filteredUsers.length)} of{" "}
+                  {filteredUsers.length}
                 </span>
               </div>
-              <Pagination currentPage={currentPage} totalPages={totalPages} onPageChange={setCurrentPage} />
+              <Pagination
+                currentPage={currentPage}
+                totalPages={totalPages}
+                onPageChange={setCurrentPage}
+              />
             </div>
           </>
         )}
@@ -458,16 +492,24 @@ export default function ReferralsAdminPage() {
       {/* User Referral Details Modal */}
       {selectedUser && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
-          <div className="absolute inset-0 bg-black/50" onClick={() => setSelectedUser(null)} />
+          <div
+            className="absolute inset-0 bg-black/50"
+            onClick={() => setSelectedUser(null)}
+          />
           <div className="relative bg-white rounded-lg shadow-xl max-w-4xl w-full max-h-[90vh] overflow-y-auto border border-gray-200">
             <div className="flex items-center justify-between p-6 border-b border-gray-200">
               <div>
                 <h2 className="text-2xl font-bold text-gray-900">
                   {selectedUser.firstName} {selectedUser.lastName}
                 </h2>
-                <p className="text-sm text-gray-500 mt-1">Referral Performance</p>
+                <p className="text-sm text-gray-500 mt-1">
+                  Referral Performance
+                </p>
               </div>
-              <button onClick={() => setSelectedUser(null)} className="p-2 hover:bg-gray-100 rounded-lg">
+              <button
+                onClick={() => setSelectedUser(null)}
+                className="p-2 hover:bg-gray-100 rounded-lg"
+              >
                 <X className="w-6 h-6" />
               </button>
             </div>
@@ -482,7 +524,9 @@ export default function ReferralsAdminPage() {
                 </div>
                 <div className="text-center p-6 bg-green-50 rounded-lg">
                   <p className="text-sm text-green-600">Total Referrals</p>
-                  <p className="text-2xl font-bold text-green-900 mt-2">{selectedUser.referralCount}</p>
+                  <p className="text-2xl font-bold text-green-900 mt-2">
+                    {selectedUser.referralCount}
+                  </p>
                 </div>
                 <div className="text-center p-6 bg-purple-50 rounded-lg">
                   <p className="text-sm text-purple-600">Total Earnings</p>
@@ -493,7 +537,9 @@ export default function ReferralsAdminPage() {
               </div>
 
               <div>
-                <h3 className="text-lg font-semibold mb-4">Users Referred by {selectedUser.firstName}</h3>
+                <h3 className="text-lg font-semibold mb-4">
+                  Users Referred by {selectedUser.firstName}
+                </h3>
                 <ReferredUsersList referrerId={selectedUser.id} />
               </div>
             </div>
@@ -512,17 +558,20 @@ function ReferredUsersList({ referrerId }: { referrerId: string }) {
   useEffect(() => {
     const fetchReferred = async () => {
       try {
-        const q = query(collection(db, 'users'), where('referredBy', '==', referrerId));
+        const q = query(
+          collection(db, "users"),
+          where("referredBy", "==", referrerId),
+        );
         const snapshot = await getDocs(q);
         const list = snapshot.docs.map((doc) => {
           const data = doc.data();
           return {
             id: doc.id,
-            firstName: data.firstName || '',
-            lastName: data.lastName || '',
-            email: data.email || '',
-            phone: data.phone || '',
-            userName: data.userName || '',
+            firstName: data.firstName || "",
+            lastName: data.lastName || "",
+            email: data.email || "",
+            phone: data.phone || "",
+            userName: data.userName || "",
             createdAt: data.createdAt?.toDate() || new Date(),
             referralCount: 0,
             referralEarnings: 0,
@@ -539,18 +588,30 @@ function ReferredUsersList({ referrerId }: { referrerId: string }) {
     fetchReferred();
   }, [referrerId]);
 
-  if (loading) return <div className="text-center py-8"><Loader className="w-6 h-6 animate-spin mx-auto" /></div>;
+  if (loading)
+    return (
+      <div className="text-center py-8">
+        <Loader className="w-6 h-6 animate-spin mx-auto" />
+      </div>
+    );
 
   if (referred.length === 0)
-    return <p className="text-center text-gray-500 py-8">No users referred yet</p>;
+    return (
+      <p className="text-center text-gray-500 py-8">No users referred yet</p>
+    );
 
   return (
     <div className="space-y-3">
       {referred.map((user) => (
-        <div key={user.id} className="flex items-center justify-between p-4 bg-gray-50 rounded-lg">
+        <div
+          key={user.id}
+          className="flex items-center justify-between p-4 bg-gray-50 rounded-lg"
+        >
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-full bg-gray-200 flex items-center justify-center">
-              <span className="text-sm font-medium">{user.userName?.[0]?.toUpperCase() || '?'}</span>
+              <span className="text-sm font-medium">
+                {user.userName?.[0]?.toUpperCase() || "?"}
+              </span>
             </div>
             <div>
               <p className="font-medium text-gray-900">
@@ -561,7 +622,7 @@ function ReferredUsersList({ referrerId }: { referrerId: string }) {
           </div>
           <div className="text-right">
             <p className="text-sm text-gray-500">
-              Joined {user.createdAt.toLocaleDateString()}
+              Joined {user.createdAt?.toLocaleDateString() ?? ''}
             </p>
           </div>
         </div>
