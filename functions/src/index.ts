@@ -41,10 +41,10 @@ export const createAdminAccount = onCall(async (request) => {
     );
   }
 
-  if (!["admin", "customer_service"].includes(role)) {
+  if (!["admin", "customer_service", "compliance_officer"].includes(role)) {
     throw new HttpsError(
       "invalid-argument",
-      "Role must be 'admin' or 'customer_service'"
+      "Role must be 'admin', 'customer_service', or 'compliance_officer'"
     );
   }
 

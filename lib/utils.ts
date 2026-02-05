@@ -15,6 +15,13 @@ export const rolePermissions: Record<AdminRole, Permission> = {
     canManageAdmins: false,
     canEditSettings: false,
   },
+  compliance_officer: {
+    canViewDashboard: true,
+    canManageUsers: true,
+    canManageTransactions: false,
+    canManageAdmins: false,
+    canEditSettings: false,
+  },
 };
 
 export function getPermissions(role: AdminRole): Permission {

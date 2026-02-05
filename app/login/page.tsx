@@ -20,6 +20,8 @@ export default function LoginPage() {
     setInfo(null);
     try {
       await signInAdmin(email, password);
+      router.refresh();
+      router.refresh();
       router.replace('/');
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : 'Failed to sign in';

@@ -1,0 +1,73 @@
+// lib/routes.ts
+import { AdminRole, AdminRoute, RouteInfo } from './types';
+import { LayoutDashboard, Users, CreditCard, Megaphone, UserCog, Settings, HeadphonesIcon } from 'lucide-react';
+import * as icons from 'lucide-react';
+
+export const allRoutes: RouteInfo[] = [
+  { name: "Dashboard", href: "/", icon: LayoutDashboard, category: "Overview" },
+  { name: "Users", href: "/users", icon: Users, category: "User Management" },
+  { name: "Compliance & KYC", href: "/compliance-kyc", icon: icons.FileCheck, category: "Security" },
+  { name: "Login Logs", href: "/login-logs", icon: icons.Logs, category: "Security" },
+  { name: "Blocked Logins", href: "/blocked-logins", icon: icons.Lock, category: "Security" },
+  { name: "Analytics", href: "/analytics", icon: icons.ChartBar, category: "Analytics" },
+  { name: "Agents", href: "/agents", icon: HeadphonesIcon, category: "Support" },
+  { name: "Transactions", href: "/transactions", icon: CreditCard, category: "Financial" },
+  { name: "Referrals", href: "/referrals", icon: icons.Link, category: "Marketing" },
+  { name: "Communications", href: "/communications", icon: Megaphone, category: "Marketing" },
+  { name: "Seo", href: "/seo", icon: icons.Globe, category: "Marketing" },
+  { name: "Admins", href: "/admins", icon: UserCog, category: "Administration" },
+  {name:"Activity Logs", href:"/activity-logs", icon: icons.Activity, category: "Administration"},
+  { name: "Settings", href: "/settings", icon: Settings, category: "Administration" },
+];
+
+// Default permissions for each role
+export const defaultRolePermissions: Record<AdminRole, Record<AdminRoute, boolean>> = {
+  admin: {
+    "/": true,
+    "/users": true,
+    "/compliance-kyc": true,
+    "/login-logs": true,
+    "/blocked-logins": true,
+    "/analytics": true,
+    "/agents": true,
+    "/transactions": true,
+    "/referrals": true,
+    "/communications": true,
+    "/seo": true,
+    "/admins": true,
+    "/settings": true,
+    "/activity-logs": true,
+  },
+  customer_service: {
+    "/": true,
+    "/users": true,
+    "/compliance-kyc": false,
+    "/login-logs": true,
+    "/blocked-logins": true,
+    "/analytics": false,
+    "/agents": true,
+    "/transactions": true,
+    "/referrals": false,
+    "/communications": true,
+    "/seo": false,
+    "/admins": false,
+    "/settings": false,
+    "/activity-logs": false,
+  },
+  compliance_officer: {
+    "/": true,
+    "/users": true,
+    "/compliance-kyc": true,
+    "/login-logs": true,
+    "/blocked-logins": true,
+    "/analytics": false,
+    "/agents": true,
+    "/transactions": true,
+    "/referrals": false,
+    "/communications": true,
+    "/seo": false,
+    "/admins": false,
+    "/settings": false,
+    "/activity-logs": false,
+  },
+};

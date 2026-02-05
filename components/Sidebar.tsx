@@ -1,51 +1,103 @@
+// components/Sidebar.tsx
 "use client";
 
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import {
-  LayoutDashboard,
-  Users,
-  CreditCard,
-  Megaphone,
-  UserCog,
-  Settings,
   LogOut,
   Menu,
   X,
   ChevronLeft,
   ChevronRight,
-  HeadphonesIcon,
-  icons,
+  LucideIcon,
 } from "lucide-react";
-import { useState } from "react";
-import { logout } from "@/lib/firestore";
+import { useState, useEffect } from "react";
+import { getCurrentAdmin, signOutAdmin } from "@/lib/auth";
+import { Admin } from "@/lib/types";
+import { allRoutes } from "@/lib/routes";
 
-const navigation = [
-  { name: "Dashboard", href: "/", icon: LayoutDashboard },
-  { name: "Users", href: "/users", icon: Users },
-  { name: "Agents", href: "/agents", icon: HeadphonesIcon },
-  { name: "Transactions", href: "/transactions", icon: CreditCard },
-  { name: "Referrals", href: "/referrals", icon: icons.Link },
-  { name: "Communications", href: "/communications", icon: Megaphone },
-  { name: "Seo", href: "/seo", icon: icons.Globe },
-  { name: "Admins", href: "/admins", icon: UserCog },
-  { name: "Settings", href: "/settings", icon: Settings },
-];
+interface NavigationItem {
+  name: string;
+  href: string;
+  icon: LucideIcon;
+  category?: string;
+}
 
 export default function Sidebar() {
   const pathname = usePathname();
   const router = useRouter();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const [currentAdmin, setCurrentAdmin] = useState<Admin | null>(null);
+  const [accessibleRoutes, setAccessibleRoutes] = useState<NavigationItem[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    const loadAdminData = async () => {
+      try {
+        setLoading(true);
+        const admin = await getCurrentAdmin();
+        setCurrentAdmin(admin);
+
+        if (admin) {
+          // Filter routes based on permissions
+          const filteredRoutes = allRoutes.filter(route => {
+            // Admin role always has access to all routes
+            if (admin.role === 'admin') return true;
+            
+            // Check if admin has permission for this route
+            return admin.permissions?.[route.href as keyof typeof admin.permissions] || false;
+          });
+          
+          setAccessibleRoutes(filteredRoutes);
+        } else {
+          // If no admin, show all routes (will be redirected by middleware)
+          setAccessibleRoutes(allRoutes);
+        }
+      } catch (error) {
+        console.error('Failed to load admin data:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadAdminData();
+  }, []);
 
   const handleLogout = async () => {
     try {
-      await logout();
+      await signOutAdmin();
       router.push("/login");
     } catch (error) {
       console.error("Logout failed:", error);
     }
   };
+
+  // Group routes by category for better organization
+  const groupedRoutes = accessibleRoutes.reduce((acc, route) => {
+    const category = route.category || 'Other';
+    if (!acc[category]) acc[category] = [];
+    acc[category].push(route);
+    return acc;
+  }, {} as Record<string, NavigationItem[]>);
+
+  // If loading, show minimal skeleton
+  if (loading) {
+    return (
+      <aside className="fixed lg:static inset-y-0 left-0 z-40 w-64 bg-gray-100 border-r border-gray-200">
+        <div className="h-full flex flex-col">
+          <div className="p-6 border-b border-gray-200">
+            <div className="h-8 bg-gray-300 rounded animate-pulse"></div>
+          </div>
+          <div className="flex-1 p-4 space-y-2">
+            {[...Array(6)].map((_, i) => (
+              <div key={i} className="h-10 bg-gray-300 rounded animate-pulse"></div>
+            ))}
+          </div>
+        </div>
+      </aside>
+    );
+  }
 
   return (
     <>
@@ -82,9 +134,9 @@ export default function Sidebar() {
           ${isCollapsed ? "lg:w-20" : "lg:w-64"} w-64
         `}
         style={{
-          backgroundColor: "var(--sidebar-bg)",
-          color: "var(--sidebar-text)",
-          borderRightColor: "var(--sidebar-border)",
+          backgroundColor: "var(--sidebar-bg, #ffffff)",
+          color: "var(--sidebar-text, #374151)",
+          borderRightColor: "var(--sidebar-border, #e5e7eb)",
           borderRightWidth: "1px",
         }}
       >
@@ -93,7 +145,7 @@ export default function Sidebar() {
           <div
             className="p-6 flex items-center justify-between"
             style={{
-              borderBottomColor: "var(--sidebar-border)",
+              borderBottomColor: "var(--sidebar-border, #e5e7eb)",
               borderBottomWidth: "1px",
             }}
           >
@@ -102,13 +154,13 @@ export default function Sidebar() {
                 <div>
                   <h1
                     className="text-2xl font-bold"
-                    style={{ color: "var(--brand-primary)" }}
+                    style={{ color: "var(--brand-primary, #3b82f6)" }}
                   >
                     PadiPay
                   </h1>
                   <p
                     className="text-sm"
-                    style={{ color: "var(--sidebar-text-secondary)" }}
+                    style={{ color: "var(--sidebar-text-secondary, #6b7280)" }}
                   >
                     Admin
                   </p>
@@ -118,9 +170,9 @@ export default function Sidebar() {
             <button
               onClick={() => setIsCollapsed(!isCollapsed)}
               className="hidden lg:flex p-2 rounded-lg transition-colors"
-              style={{ color: "var(--sidebar-text)" }}
+              style={{ color: "var(--sidebar-text, #374151)" }}
               onMouseEnter={(e) =>
-                (e.currentTarget.style.backgroundColor = "var(--sidebar-hover)")
+                (e.currentTarget.style.backgroundColor = "var(--sidebar-hover, #f3f4f6)")
               }
               onMouseLeave={(e) =>
                 (e.currentTarget.style.backgroundColor = "transparent")
@@ -136,57 +188,87 @@ export default function Sidebar() {
           </div>
 
           {/* Navigation */}
-          <nav className="flex-1 p-4 space-y-1">
-            {navigation.map((item) => {
-              const isActive = pathname === item.href;
-              return (
-                <Link
-                  key={item.name}
-                  href={item.href}
-                  onClick={() => setIsMobileMenuOpen(false)}
-                  className={`
-                    flex items-center gap-3 px-4 py-3 rounded-lg
-                    transition-colors duration-200
-                  `}
-                  style={{
-                    backgroundColor: isActive
-                      ? "var(--sidebar-active-bg)"
-                      : "transparent",
-                    color: isActive
-                      ? "var(--brand-primary)"
-                      : "var(--sidebar-text)",
-                    fontWeight: isActive ? "500" : "400",
-                  }}
-                  onMouseEnter={(e) => {
-                    if (!isActive)
-                      e.currentTarget.style.backgroundColor =
-                        "var(--sidebar-hover)";
-                  }}
-                  onMouseLeave={(e) => {
-                    if (!isActive)
-                      e.currentTarget.style.backgroundColor = "transparent";
-                  }}
-                  title={isCollapsed ? item.name : ""}
-                >
-                  <item.icon className="w-5 h-5 flex-shrink-0" />
-                  {!isCollapsed && <span>{item.name}</span>}
-                </Link>
-              );
-            })}
+          <nav className="flex-1 p-4 overflow-y-auto">
+            {Object.entries(groupedRoutes).map(([category, routes]) => (
+              <div key={category} className="mb-6 last:mb-0">
+                {!isCollapsed && routes.length > 0 && (
+                  <p className="text-xs font-medium uppercase tracking-wider mb-2 px-2"
+                    style={{ color: "var(--sidebar-text-secondary, #6b7280)" }}>
+                    {category}
+                  </p>
+                )}
+                <div className="space-y-1">
+                  {routes.map((item) => {
+                    const isActive = pathname === item.href;
+                    return (
+                      <Link
+                        key={item.name}
+                        href={item.href}
+                        onClick={() => setIsMobileMenuOpen(false)}
+                        className={`
+                          flex items-center gap-3 px-3 py-2.5 rounded-lg
+                          transition-colors duration-200
+                        `}
+                        style={{
+                          backgroundColor: isActive
+                            ? "var(--sidebar-active-bg, #e0f2fe)"
+                            : "transparent",
+                          color: isActive
+                            ? "var(--brand-primary, #3b82f6)"
+                            : "var(--sidebar-text, #374151)",
+                          fontWeight: isActive ? "500" : "400",
+                        }}
+                        onMouseEnter={(e) => {
+                          if (!isActive)
+                            e.currentTarget.style.backgroundColor =
+                              "var(--sidebar-hover, #f3f4f6)";
+                        }}
+                        onMouseLeave={(e) => {
+                          if (!isActive)
+                            e.currentTarget.style.backgroundColor = "transparent";
+                        }}
+                        title={isCollapsed ? item.name : ""}
+                      >
+                        <item.icon className="w-5 h-5 flex-shrink-0" />
+                        {!isCollapsed && <span className="text-sm">{item.name}</span>}
+                      </Link>
+                    );
+                  })}
+                </div>
+              </div>
+            ))}
+            
+            {accessibleRoutes.length === 0 && !loading && (
+              <div className="p-4 text-center">
+                <p className="text-sm text-gray-500">No accessible pages</p>
+              </div>
+            )}
           </nav>
 
           {/* User profile */}
           <div className="p-4 border-t border-gray-200">
-            {!isCollapsed && (
+            {!isCollapsed && currentAdmin && (
               <div className="flex items-center gap-3 px-4 py-3 mb-2">
                 <div className="w-10 h-10 rounded-full bg-blue-100 flex items-center justify-center flex-shrink-0">
-                  <span className="text-blue-600 font-semibold">A</span>
+                  <span className="text-blue-600 font-semibold">
+                    {currentAdmin.name?.charAt(0) || 'A'}
+                  </span>
                 </div>
-                <div className="flex-1">
-                  <p className="text-sm font-medium text-gray-900">
-                    Admin User
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-gray-900 truncate">
+                    {currentAdmin.name}
                   </p>
-                  <p className="text-xs text-gray-500">admin@padipay.com</p>
+                  <p className="text-xs text-gray-500 truncate">
+                    {currentAdmin.email}
+                  </p>
+                  <div className="flex items-center gap-1 mt-1">
+                    <div className={`w-2 h-2 rounded-full ${
+                      currentAdmin.status === 'active' ? 'bg-green-500' : 'bg-gray-300'
+                    }`} />
+                    <span className="text-xs text-gray-500 capitalize">
+                      {currentAdmin.role.replace('_', ' ')}
+                    </span>
+                  </div>
                 </div>
               </div>
             )}
@@ -198,7 +280,7 @@ export default function Sidebar() {
               title={isCollapsed ? "Logout" : ""}
             >
               <LogOut className="w-5 h-5 flex-shrink-0" />
-              {!isCollapsed && <span>Logout</span>}
+              {!isCollapsed && <span className="text-sm">Logout</span>}
             </button>
           </div>
         </div>

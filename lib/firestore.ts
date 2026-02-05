@@ -1,4 +1,4 @@
-import { db, auth, functions } from './firebase';
+import { db, auth, functions } from "./firebase";
 import {
   collection,
   query,
@@ -12,43 +12,60 @@ import {
   deleteDoc,
   serverTimestamp,
   deleteField,
-} from 'firebase/firestore';
-import { signOut } from 'firebase/auth';
-import { User, Transaction, Admin, DashboardStats, Business, AdminRole, Referral } from './types';
-import { httpsCallable } from 'firebase/functions';
+} from "firebase/firestore";
+import { signOut } from "firebase/auth";
+import {
+  User,
+  Transaction,
+  Admin,
+  DashboardStats,
+  Business,
+  AdminRole,
+  Referral,
+} from "./types";
+import { httpsCallable } from "firebase/functions";
 
 // USER OPERATIONS
 export async function getUsers() {
-  const q = query(collection(db, 'users'), orderBy('createdAt', 'desc'));
+  const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((doc) => {
     const data = doc.data();
     return {
       id: doc.id,
       ...data,
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt,
+      createdAt: data.createdAt?.toDate
+        ? data.createdAt.toDate()
+        : data.createdAt,
     } as User;
   });
 }
 
 export async function getUser(userId: string) {
-  const docRef = doc(db, 'users', userId);
+  const docRef = doc(db, "users", userId);
   const docSnap = await getDoc(docRef);
   return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
 }
 
-export async function updateUserStatus(userId: string, status: 'active' | 'inactive' | 'suspended') {
-  const userRef = doc(db, 'users', userId);
+export async function updateUserStatus(
+  userId: string,
+  status: "active" | "inactive" | "suspended",
+) {
+  const userRef = doc(db, "users", userId);
   await updateDoc(userRef, { status });
 }
 
 export async function setUserRole(userId: string, role?: string | null) {
-  const userRef = doc(db, 'users', userId);
+  const userRef = doc(db, "users", userId);
   if (role == null) {
-    await updateDoc(userRef, { role: deleteField(), agentAssignedAt: deleteField(), updatedAt: serverTimestamp() });
+    await updateDoc(userRef, {
+      role: deleteField(),
+      agentAssignedAt: deleteField(),
+      updatedAt: serverTimestamp(),
+    });
   } else {
     const updates: Record<string, any> = { role, updatedAt: serverTimestamp() };
-    if (role === 'agent') {
+    if (role === "agent") {
       updates.agentAssignedAt = serverTimestamp();
     } else {
       updates.agentAssignedAt = deleteField();
@@ -60,7 +77,7 @@ export async function setUserRole(userId: string, role?: string | null) {
 // TRANSACTION OPERATIONS
 export async function getTransactions() {
   // Some documents lack a uniform 'date' field; fetch all and sort client-side using known date/timestamp fields.
-  const snapshot = await getDocs(collection(db, 'transactions'));
+  const snapshot = await getDocs(collection(db, "transactions"));
   const items = snapshot.docs.map((docSnap) => {
     const data = docSnap.data() as Transaction;
     const dateVal = data.timestamp || data.date || data.createdAt;
@@ -80,13 +97,16 @@ export async function getTransactions() {
 }
 
 export async function getTransaction(transactionId: string) {
-  const docRef = doc(db, 'transactions', transactionId);
+  const docRef = doc(db, "transactions", transactionId);
   const docSnap = await getDoc(docRef);
   return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
 }
 
 export async function getTransactionsByUser(userId: string) {
-  const q = query(collection(db, 'transactions'), where('userId', '==', userId));
+  const q = query(
+    collection(db, "transactions"),
+    where("userId", "==", userId),
+  );
   const snapshot = await getDocs(q);
   const items = snapshot.docs.map((docSnap) => {
     const data = docSnap.data() as Transaction;
@@ -100,7 +120,11 @@ export async function getTransactionsByUser(userId: string) {
   });
 
   return items
-    .filter((t) => t.userId === userId || (t as Transaction & { user_id?: string }).user_id === userId)
+    .filter(
+      (t) =>
+        t.userId === userId ||
+        (t as Transaction & { user_id?: string }).user_id === userId,
+    )
     .sort((a, b) => {
       const ad = a.date ? new Date(a.date).getTime() : 0;
       const bd = b.date ? new Date(b.date).getTime() : 0;
@@ -110,15 +134,19 @@ export async function getTransactionsByUser(userId: string) {
 }
 
 export async function getTransactionStatsByUser(userId: string) {
-  const q = query(collection(db, 'transactions'), where('userId', '==', userId));
+  const q = query(
+    collection(db, "transactions"),
+    where("userId", "==", userId),
+  );
   const snapshot = await getDocs(q);
   let total = 0;
   let count = 0;
   snapshot.docs.forEach((docSnap) => {
     const data = docSnap.data() as Transaction;
-    const amt = typeof data.amount === 'number' ? data.amount : Number(data.amount || 0);
+    const amt =
+      typeof data.amount === "number" ? data.amount : Number(data.amount || 0);
     // Only count successful transactions to represent actual transacted amount
-    if (data.status === 'success' || data.status === 'successful') {
+    if (data.status === "success" || data.status === "successful") {
       total += amt;
       count += 1;
     }
@@ -127,66 +155,84 @@ export async function getTransactionStatsByUser(userId: string) {
 }
 
 export async function getReferralsByReferrer(referrerUid: string) {
-  const q = query(collection(db, 'referrals'), where('referrerUid', '==', referrerUid), orderBy('createdAt', 'desc'));
+  const q = query(
+    collection(db, "referrals"),
+    where("referrerUid", "==", referrerUid),
+    orderBy("createdAt", "desc"),
+  );
   const snapshot = await getDocs(q);
   return snapshot.docs.map((docSnap) => {
     const data = docSnap.data();
     return {
       id: docSnap.id,
       ...data,
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt,
+      createdAt: data.createdAt?.toDate
+        ? data.createdAt.toDate()
+        : data.createdAt,
     } as Referral;
   });
 }
 
-export async function sendUserNotification(userId: string, title: string, body: string) {
+export async function sendUserNotification(
+  userId: string,
+  title: string,
+  body: string,
+) {
   try {
-    const callable = httpsCallable(functions, 'sendUserNotification');
+    const callable = httpsCallable(functions, "sendUserNotification");
     await callable({ userId, title, body });
   } catch (err) {
-    console.error('Failed to send user notification:', err);
+    console.error("Failed to send user notification:", err);
     throw err;
   }
 }
 
 export async function updateTransactionStatus(
   transactionId: string,
-  status: 'success' | 'pending' | 'failed'
+  status: "success" | "pending" | "failed",
 ) {
-  const txnRef = doc(db, 'transactions', transactionId);
+  const txnRef = doc(db, "transactions", transactionId);
   await updateDoc(txnRef, { status });
 }
 
 // ADMIN OPERATIONS
 export async function getAdmins() {
-  const q = query(collection(db, 'admins'));
+  const q = query(collection(db, "admins"));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((docSnap) => {
     const data = docSnap.data();
     return {
       id: docSnap.id,
       ...data,
-      createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt,
-      lastLoginAt: data.lastLoginAt?.toDate ? data.lastLoginAt.toDate() : data.lastLoginAt,
+      createdAt: data.createdAt?.toDate
+        ? data.createdAt.toDate()
+        : data.createdAt,
+      lastLoginAt: data.lastLoginAt?.toDate
+        ? data.lastLoginAt.toDate()
+        : data.lastLoginAt,
     } as Admin;
   });
 }
 
 export async function getAdmin(adminId: string) {
-  const docRef = doc(db, 'admins', adminId);
+  const docRef = doc(db, "admins", adminId);
   const docSnap = await getDoc(docRef);
   if (!docSnap.exists()) return null;
   const data = docSnap.data();
   return {
     id: docSnap.id,
     ...data,
-    createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : data.createdAt,
-    lastLoginAt: data.lastLoginAt?.toDate ? data.lastLoginAt.toDate() : data.lastLoginAt,
+    createdAt: data.createdAt?.toDate
+      ? data.createdAt.toDate()
+      : data.createdAt,
+    lastLoginAt: data.lastLoginAt?.toDate
+      ? data.lastLoginAt.toDate()
+      : data.lastLoginAt,
   } as Admin;
 }
 
-export async function createAdmin(adminData: Omit<Admin, 'id'>) {
-  const adminRef = doc(collection(db, 'admins'));
+export async function createAdmin(adminData: Omit<Admin, "id">) {
+  const adminRef = doc(collection(db, "admins"));
   await setDoc(adminRef, {
     ...adminData,
     createdAt: serverTimestamp(),
@@ -196,42 +242,51 @@ export async function createAdmin(adminData: Omit<Admin, 'id'>) {
 }
 
 export async function deleteAdmin(adminId: string) {
-  await deleteDoc(doc(db, 'admins', adminId));
+  await deleteDoc(doc(db, "admins", adminId));
 }
-
-export async function upsertAdminProfile(adminId: string, data: { name?: string; role?: AdminRole; status?: 'active' | 'inactive'; email?: string; }) {
-  const adminRef = doc(db, 'admins', adminId);
+export async function upsertAdminProfile(
+  adminId: string,
+  data: {
+    createdAt?: Date | number;
+    name?: string;
+    role?: AdminRole;
+    status?: "active" | "inactive";
+    email?: string;
+    permissions?: Record<string, boolean>; // Add this line
+  },
+) {
+  const adminRef = doc(db, "admins", adminId);
   await setDoc(
     adminRef,
     {
       ...data,
       updatedAt: serverTimestamp(),
     },
-    { merge: true }
+    { merge: true },
   );
 }
 
 export async function recordAdminLogin(adminId: string) {
-  const adminRef = doc(db, 'admins', adminId);
+  const adminRef = doc(db, "admins", adminId);
   await setDoc(
     adminRef,
     {
       lastLoginAt: serverTimestamp(),
-      status: 'active',
+      status: "active",
     },
-    { merge: true }
+    { merge: true },
   );
 }
 
 // SETTINGS OPERATIONS
 export async function getSettings() {
-  const docRef = doc(db, 'settings', 'config');
+  const docRef = doc(db, "settings", "config");
   const docSnap = await getDoc(docRef);
   return docSnap.exists() ? docSnap.data() : null;
 }
 
 export async function updateSettings(settings: Record<string, unknown>) {
-  const docRef = doc(db, 'settings', 'config');
+  const docRef = doc(db, "settings", "config");
   await updateDoc(docRef, settings);
 }
 
@@ -242,24 +297,24 @@ export async function getDashboardStats(): Promise<DashboardStats> {
   const transactions = await getTransactions();
 
   const deposits = transactions
-    .filter((t) => t.type === 'deposit' && t.status === 'success')
+    .filter((t) => t.type === "deposit" && t.status === "success")
     .reduce((sum, t) => sum + t.amount, 0);
   const withdrawals = transactions
-    .filter((t) => t.type === 'withdrawal' && t.status === 'success')
+    .filter((t) => t.type === "withdrawal" && t.status === "success")
     .reduce((sum, t) => sum + t.amount, 0);
   const pendingWithdrawals = transactions
-    .filter((t) => t.type === 'withdrawal' && t.status === 'pending')
+    .filter((t) => t.type === "withdrawal" && t.status === "pending")
     .reduce((sum, t) => sum + t.amount, 0);
 
   // Generate weekly data (this should be based on actual data from your database)
   const weeklyActivity = [
-    { day: 'Mon', amount: 45000 },
-    { day: 'Tue', amount: 52000 },
-    { day: 'Wed', amount: 48000 },
-    { day: 'Thu', amount: 61000 },
-    { day: 'Fri', amount: 55000 },
-    { day: 'Sat', amount: 67000 },
-    { day: 'Sun', amount: 58000 },
+    { day: "Mon", amount: 45000 },
+    { day: "Tue", amount: 52000 },
+    { day: "Wed", amount: 48000 },
+    { day: "Thu", amount: 61000 },
+    { day: "Fri", amount: 55000 },
+    { day: "Sat", amount: 67000 },
+    { day: "Sun", amount: 58000 },
   ];
 
   return {
@@ -275,7 +330,7 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 
 // BUSINESS OPERATIONS
 export async function getBusinesses() {
-  const q = query(collection(db, 'businesses'));
+  const q = query(collection(db, "businesses"));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((doc) => ({
     id: doc.id,
@@ -284,15 +339,15 @@ export async function getBusinesses() {
 }
 
 export async function getBusiness(businessId: string) {
-  const docRef = doc(db, 'businesses', businessId);
+  const docRef = doc(db, "businesses", businessId);
   const docSnap = await getDoc(docRef);
   return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
 }
 
 export async function getBusinessesByOwner(userId: string) {
   const q = query(
-    collection(db, 'businesses'),
-    where('contact_data.email', '==', userId) // Adjust based on actual field
+    collection(db, "businesses"),
+    where("contact_data.email", "==", userId), // Adjust based on actual field
   );
   const snapshot = await getDocs(q);
   return snapshot.docs.map((doc) => ({
@@ -303,9 +358,9 @@ export async function getBusinessesByOwner(userId: string) {
 
 export async function updateBusinessStatus(
   businessId: string,
-  status: 'active' | 'inactive' | 'suspended'
+  status: "active" | "inactive" | "suspended",
 ) {
-  const bizRef = doc(db, 'businesses', businessId);
+  const bizRef = doc(db, "businesses", businessId);
   await updateDoc(bizRef, { status });
 }
 
@@ -313,52 +368,51 @@ export async function updateBusinessStatus(
 export async function freezeAccount(
   accountId: string,
   freezeReason: string,
-  freezeDescription: string
+  freezeDescription: string,
 ) {
   try {
-    const { httpsCallable } = await import('firebase/functions');
-    const { functions } = await import('./firebase');
-    
-    const freezeAccountFn = httpsCallable(functions, 'freezeAccount');
+    const { httpsCallable } = await import("firebase/functions");
+    const { functions } = await import("./firebase");
+
+    const freezeAccountFn = httpsCallable(functions, "freezeAccount");
     const result = await freezeAccountFn({
       accountId,
       freezeReason,
       freezeDescription,
     });
-    
+
     return result.data;
   } catch (error) {
-    console.error('Error freezing account:', error);
+    console.error("Error freezing account:", error);
     throw error;
   }
 }
 
-
 export async function unFreezeAccount(accountId: string) {
   try {
-    const { httpsCallable } = await import('firebase/functions');
-    const { functions } = await import('./firebase');
-    
-    const unFreezeAccountFn = httpsCallable(functions, 'unFreezeAccount');
+    const { httpsCallable } = await import("firebase/functions");
+    const { functions } = await import("./firebase");
+
+    const unFreezeAccountFn = httpsCallable(functions, "unFreezeAccount");
     const result = await unFreezeAccountFn({
       accountId,
     });
-    
+
     return result.data;
   } catch (error) {
-    console.error('Error unfreezing account:', error);
+    console.error("Error unfreezing account:", error);
     throw error;
   }
 }
 
 export async function deleteUser(userId: string) {
   try {
-    const userRef = doc(db, 'users', userId);
+    const userRef = doc(db, "users", userId);
     await deleteDoc(userRef);
-    console.log('User deleted from Firestore:', userId);
-    return { success: true, message: 'User deleted successfully' };
+    console.log("User deleted from Firestore:", userId);
+    return { success: true, message: "User deleted successfully" };
   } catch (error) {
-    console.error('Error deleting user:', error);
+    console.error("Error deleting user:", error);
     throw error;
   }
 }
@@ -375,10 +429,10 @@ export async function updateUserProfile(
     state?: string;
     country?: string;
     dateOfBirth?: string;
-  }
+  },
 ) {
   try {
-    const userRef = doc(db, 'users', userId);
+    const userRef = doc(db, "users", userId);
     await updateDoc(userRef, {
       ...updates,
       updatedAt: serverTimestamp(),
@@ -389,21 +443,21 @@ export async function updateUserProfile(
       try {
         const updateUserEmailFn = httpsCallable(
           getFirebaseFunction(),
-          'updateUserEmail'
+          "updateUserEmail",
         );
         await updateUserEmailFn({
           userId,
           newEmail: updates.email,
         });
       } catch (error) {
-        console.error('Error updating email in auth:', error);
+        console.error("Error updating email in auth:", error);
         // Non-critical error - Firestore update succeeded
       }
     }
 
-    return { success: true, message: 'Profile updated successfully' };
+    return { success: true, message: "Profile updated successfully" };
   } catch (error) {
-    console.error('Error updating user profile:', error);
+    console.error("Error updating user profile:", error);
     throw error;
   }
 }
@@ -411,14 +465,14 @@ export async function updateUserProfile(
 export async function contactUser(
   userId: string,
   message: string,
-  channel: 'email' | 'sms'
+  channel: "email" | "sms",
 ) {
   try {
     // Send contact message via email or SMS
-    console.log('Contacting user:', { userId, message, channel });
+    console.log("Contacting user:", { userId, message, channel });
     return { success: true, message: `Message sent via ${channel}` };
   } catch (error) {
-    console.error('Error contacting user:', error);
+    console.error("Error contacting user:", error);
     throw error;
   }
 }
@@ -427,11 +481,11 @@ export async function logout(): Promise<void> {
   try {
     await signOut(auth);
   } catch (error) {
-    console.error('Error logging out:', error);
+    console.error("Error logging out:", error);
     throw error;
   }
 }
 
 function getFirebaseFunction(): import("@firebase/functions").Functions {
-  throw new Error('Function not implemented.');
+  throw new Error("Function not implemented.");
 }

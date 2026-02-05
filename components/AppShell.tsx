@@ -6,21 +6,21 @@ import Sidebar from '@/components/Sidebar';
 import { useAuth } from '@/hooks/useAuth';
 import Loading from '@/components/Loading';
 
-const roleAccess: Record<string, Array<'admin' | 'customer_service'>> = {
-  '/': ['admin', 'customer_service'],
-  '/users': ['admin', 'customer_service'],
-  '/users/': ['admin', 'customer_service'],
+const roleAccess: Record<string, Array<'admin' | 'customer_service' | 'compliance_officer'>> = {
+  '/': ['admin', 'customer_service', 'compliance_officer'],
+  '/users': ['admin', 'customer_service', 'compliance_officer'],
+  '/users/': ['admin', 'customer_service', 'compliance_officer'],
   '/admins': ['admin'],
   '/admins/': ['admin'],
   '/agents': ['admin'],
   '/agents/': ['admin'],
-  '/transactions': ['admin'],
-  '/communications': ['admin', 'customer_service'],
-  '/communications/': ['admin', 'customer_service'],
+  '/transactions': ['admin', 'customer_service', 'compliance_officer'],
+  '/communications': ['admin', 'customer_service', 'compliance_officer'],
+  '/communications/': ['admin', 'customer_service', 'compliance_officer'],
   '/settings': ['admin'],
 };
 
-function pathAllowed(pathname: string, role?: 'admin' | 'customer_service') {
+function pathAllowed(pathname: string, role?: 'admin' | 'customer_service' | 'compliance_officer') {
   if (!role) return false;
   const entries = Object.entries(roleAccess);
   for (const [prefix, roles] of entries) {
@@ -66,6 +66,7 @@ export default function AppShell({ children }: { children: ReactNode }) {
   }
 
   if (user && !admin && !isLogin) {
+    router.refresh();
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 text-gray-700">
         <div className="text-center space-y-2">

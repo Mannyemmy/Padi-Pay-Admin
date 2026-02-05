@@ -95,6 +95,7 @@ export default function AgentsPage() {
   }
 
   if (!admin) {
+    router.refresh();
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50 text-gray-700">
         <div className="text-center space-y-2">

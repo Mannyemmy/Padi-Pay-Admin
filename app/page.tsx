@@ -1,5 +1,7 @@
 "use client";
-
+import { getBusinesses } from "@/lib/firestore"; // Add this import
+import { httpsCallable } from "firebase/functions";
+import { functions } from "@/lib/firebase";
 import { useEffect, useMemo, useState } from "react";
 import {
   Wallet,
@@ -27,41 +29,68 @@ import {
   ResponsiveContainer,
 } from "recharts";
 import { getTransactions, getUsers } from "@/lib/firestore";
-import { doc, getDoc } from 'firebase/firestore';
-import { db } from '@/lib/firebase';
+import { doc, getDoc } from "firebase/firestore";
+import { db } from "@/lib/firebase";
 
-const FETCH_BALANCE_URL = 'https://us-central1-card-app-829ee.cloudfunctions.net/fetchAccountBalanceHttp';
+const FETCH_BALANCE_URL =
+  "https://us-central1-card-app-829ee.cloudfunctions.net/fetchAccountBalanceHttp";
 
-type AccountBalanceResp = { data?: { availableBalance?: number; ledgerBalance?: number; hold?: number; pending?: number } };
+type AccountBalanceResp = {
+  data?: {
+    availableBalance?: number;
+    ledgerBalance?: number;
+    hold?: number;
+    pending?: number;
+  };
+};
 
-async function fetchAccountBalanceHttp(accountId: string): Promise<AccountBalanceResp> {
+// Add fetchAccountBalance function at the top with your other imports
+const fetchAccountBalance = httpsCallable<
+  { accountId: string },
+  { data: { availableBalance: number; currency: string } }
+>(functions, "fetchAccountBalance");
+
+// Add this helper function to get account ID
+const getAccountId = (entity: User | Business): string | null => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  return (entity.getAnchorData as any)?.virtualAccount?.data?.id || null;
+};
+async function fetchAccountBalanceHttp(
+  accountId: string,
+): Promise<AccountBalanceResp> {
   const url = `${FETCH_BALANCE_URL}`;
   const res = await fetch(url, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ accountId }),
   });
   if (!res.ok) {
-    const text = await res.text().catch(() => '');
-    throw new Error(`Failed to fetch account balance: ${res.status} ${res.statusText} ${text}`);
+    const text = await res.text().catch(() => "");
+    throw new Error(
+      `Failed to fetch account balance: ${res.status} ${res.statusText} ${text}`,
+    );
   }
   return res.json();
 }
-import { Transaction, User } from "@/lib/types";
+import { Business, Transaction, User } from "@/lib/types";
 
 type DatePeriod = "today" | "week" | "month" | "year";
 type RawTxn = Record<string, unknown>;
 
 const getCurrencySymbol = (currency?: string): string => {
-  if (!currency) return '₦'; // Default to Naira
-  
+  if (!currency) return "₦"; // Default to Naira
+
   const currencyLower = currency.toLowerCase();
-  if (currencyLower.includes('usd') || currencyLower.includes('dollar')) return '$';
-  if (currencyLower.includes('eur') || currencyLower.includes('euro')) return '€';
-  if (currencyLower.includes('gbp') || currencyLower.includes('pound')) return '£';
-  if (currencyLower.includes('ngn') || currencyLower.includes('naira')) return '₦';
-  
-  return '₦'; // Default fallback
+  if (currencyLower.includes("usd") || currencyLower.includes("dollar"))
+    return "$";
+  if (currencyLower.includes("eur") || currencyLower.includes("euro"))
+    return "€";
+  if (currencyLower.includes("gbp") || currencyLower.includes("pound"))
+    return "£";
+  if (currencyLower.includes("ngn") || currencyLower.includes("naira"))
+    return "₦";
+
+  return "₦"; // Default fallback
 };
 
 const formatAmount = (amount: number, currency?: string): string => {
@@ -70,16 +99,16 @@ const formatAmount = (amount: number, currency?: string): string => {
 };
 
 const formatTransactionType = (type?: string): string => {
-  if (!type) return 'N/A';
+  if (!type) return "N/A";
   const typeLower = type.toLowerCase();
-  if (typeLower === 'fund') return 'Card Funding';
+  if (typeLower === "fund") return "Card Funding";
   return type.charAt(0).toUpperCase() + type.slice(1);
 };
 
 const pickString = (obj: RawTxn, ...keys: string[]) => {
   for (const key of keys) {
     const v = obj[key];
-    if (typeof v === 'string' && v.trim().length) return v;
+    if (typeof v === "string" && v.trim().length) return v;
   }
   return undefined;
 };
@@ -87,8 +116,9 @@ const pickString = (obj: RawTxn, ...keys: string[]) => {
 const pickNumber = (obj: RawTxn, ...keys: string[]) => {
   for (const key of keys) {
     const v = obj[key];
-    if (typeof v === 'number') return v;
-    if (typeof v === 'string' && v.trim() && !Number.isNaN(Number(v))) return Number(v);
+    if (typeof v === "number") return v;
+    if (typeof v === "string" && v.trim() && !Number.isNaN(Number(v)))
+      return Number(v);
   }
   return undefined;
 };
@@ -97,7 +127,7 @@ const pickDate = (obj: RawTxn, ...keys: string[]) => {
   for (const key of keys) {
     const v = obj[key] as any;
     if (v?.toDate) return v.toDate();
-    if (typeof v === 'string' || typeof v === 'number') {
+    if (typeof v === "string" || typeof v === "number") {
       const d = new Date(v);
       if (!Number.isNaN(d.getTime())) return d;
     }
@@ -115,51 +145,148 @@ export default function DashboardPage() {
   const [currentPage, setCurrentPage] = useState<number>(1);
 
   // Company account balance and transfer details
-  const [companyBalance, setCompanyBalance] = useState<{ availableBalance: number; ledgerBalance: number; hold: number; pending: number } | null>(null);
-  const [companyTransfer, setCompanyTransfer] = useState<{ accountNumber?: string; bankName?: string } | null>(null);
+  const [companyBalance, setCompanyBalance] = useState<{
+    availableBalance: number;
+    ledgerBalance: number;
+    hold: number;
+    pending: number;
+  } | null>(null);
+  const [companyTransfer, setCompanyTransfer] = useState<{
+    accountNumber?: string;
+    bankName?: string;
+  } | null>(null);
   const [companyLoading, setCompanyLoading] = useState<boolean>(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [copiedAccount, setCopiedAccount] = useState<boolean>(false);
+  // Add new state for total assets
+  const [totalAssets, setTotalAssets] = useState<number>(0);
+  const [assetsLoading, setAssetsLoading] = useState<boolean>(true);
 
+  // Add this function to calculate total assets
+  const calculateTotalAssets = async () => {
+    try {
+      setAssetsLoading(true);
+      let total = 0;
+
+      // Get all users and businesses
+      const [allUsers, allBusinesses] = await Promise.all([
+        getUsers(),
+        getBusinesses(),
+      ]);
+
+      // Function to fetch balance for a single entity
+      const fetchEntityBalance = async (
+        entity: User | Business,
+      ): Promise<number> => {
+        const accountId = getAccountId(entity);
+        if (!accountId) return 0;
+
+        try {
+          const result = await fetchAccountBalance({ accountId });
+          const balanceData = result.data.data as {
+            availableBalance: number;
+            currency?: string;
+          };
+
+          // Convert from kobo to naira (divide by 100)
+          return balanceData.availableBalance / 100;
+        } catch (error) {
+          console.error(
+            `Error fetching balance for entity ${entity.id}:`,
+            error,
+          );
+          return 0;
+        }
+      };
+
+      // Fetch balances for all users and businesses in parallel
+      const userBalances = await Promise.allSettled(
+        allUsers.map((user) => fetchEntityBalance(user)),
+      );
+
+      const businessBalances = await Promise.allSettled(
+        allBusinesses.map((business) => fetchEntityBalance(business)),
+      );
+
+      // Sum up all successful balances
+      userBalances.forEach((result) => {
+        if (result.status === "fulfilled") {
+          total += result.value;
+        }
+      });
+
+      businessBalances.forEach((result) => {
+        if (result.status === "fulfilled") {
+          total += result.value;
+        }
+      });
+
+      setTotalAssets(total);
+    } catch (error) {
+      console.error("Error calculating total assets:", error);
+      setTotalAssets(0);
+    } finally {
+      setAssetsLoading(false);
+    }
+  };
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        const [txns, usersData] = await Promise.all([getTransactions(), getUsers()]);
+        const [txns, usersData] = await Promise.all([
+          getTransactions(),
+          getUsers(),
+        ]);
+
+        // Calculate total assets in parallel with other data processing
+        calculateTotalAssets();
 
         const userMap = new Map(usersData.map((u) => [u.id, u]));
-
-        // Normalize transactions same way as transactions page
         const normalized = txns.map((t) => {
           const raw: RawTxn = t as RawTxn;
-          const user = userMap.get(pickString(raw, 'userId', 'user_id') || '');
+          const user = userMap.get(pickString(raw, "userId", "user_id") || "");
 
-          const parsedDate = pickDate(raw, 'timestamp', 'date', 'createdAt');
-          const amount = pickNumber(raw, 'amount') ?? 0;
-          const type = pickString(raw, 'type') || 'unknown';
-          const nestedApiStatus = (raw as any)?.api_response?.data?.attributes?.status;
+          const parsedDate = pickDate(raw, "timestamp", "date", "createdAt");
+          const amount = pickNumber(raw, "amount") ?? 0;
+          const type = pickString(raw, "type") || "unknown";
+          const nestedApiStatus = (raw as any)?.api_response?.data?.attributes
+            ?.status;
           const nestedFullDataStatus = (raw as any)?.fullData?.status;
           const nestedDetailStatus = (raw as any)?.detail?.status;
           const statusSource =
-            pickString(raw, 'status') ||
-            (typeof nestedApiStatus === 'string' ? nestedApiStatus : undefined) ||
-            (typeof nestedFullDataStatus === 'string' ? nestedFullDataStatus : undefined) ||
-            (typeof nestedDetailStatus === 'string' ? nestedDetailStatus : undefined) ||
-            'unknown';
+            pickString(raw, "status") ||
+            (typeof nestedApiStatus === "string"
+              ? nestedApiStatus
+              : undefined) ||
+            (typeof nestedFullDataStatus === "string"
+              ? nestedFullDataStatus
+              : undefined) ||
+            (typeof nestedDetailStatus === "string"
+              ? nestedDetailStatus
+              : undefined) ||
+            "unknown";
           const status = statusSource.toLowerCase();
-          const reference = pickString(raw, 'reference', 'transaction_reference', 'id') || t.id;
-          const currency = pickString(raw, 'currency', 'currencyCode', 'currency_code');
+          const reference =
+            pickString(raw, "reference", "transaction_reference", "id") || t.id;
+          const currency = pickString(
+            raw,
+            "currency",
+            "currencyCode",
+            "currency_code",
+          );
 
           return {
             ...t,
             id: t.id || reference,
             userName: user
-              ? `${user.firstName || ''} ${user.lastName || ''}`.trim() || user.email || user.phone
-              : pickString(raw, 'userName'),
+              ? `${user.firstName || ""} ${user.lastName || ""}`.trim() ||
+                user.email ||
+                user.phone
+              : pickString(raw, "userName"),
             date: parsedDate,
             amount,
             type,
-            status: status as Transaction['status'],
+            status: status as Transaction["status"],
             reference,
             currency,
           } as Transaction;
@@ -170,16 +297,27 @@ export default function DashboardPage() {
 
         // Fetch company account details and balance
         try {
-          const accountRef = doc(db, 'company', 'account_details');
+          const accountRef = doc(db, "company", "account_details");
           const accountSnap = await getDoc(accountRef);
-          console.log('company/account_details exists:', accountSnap.exists(), 'data:', accountSnap.exists() ? accountSnap.data() : null);
+          console.log(
+            "company/account_details exists:",
+            accountSnap.exists(),
+            "data:",
+            accountSnap.exists() ? accountSnap.data() : null,
+          );
           if (accountSnap.exists()) {
             const acctData = accountSnap.data() as Record<string, any>;
             const accountId = acctData?.accountId || acctData?.account_id;
-            const accountNumber = acctData?.accountNumber || acctData?.account_number;
-            const bankName = acctData?.bankName || acctData?.bank_name || acctData?.bank;
+            const accountNumber =
+              acctData?.accountNumber || acctData?.account_number;
+            const bankName =
+              acctData?.bankName || acctData?.bank_name || acctData?.bank;
 
-            console.log('company account doc', { accountId, accountNumber, bankName });
+            console.log("company account doc", {
+              accountId,
+              accountNumber,
+              bankName,
+            });
 
             setCompanyTransfer({ accountNumber, bankName });
 
@@ -188,7 +326,11 @@ export default function DashboardPage() {
               setCompanyError(null);
               try {
                 const resp = await fetchAccountBalanceHttp(String(accountId));
-                console.log('fetchAccountBalanceHttp response for accountId', accountId, resp);
+                console.log(
+                  "fetchAccountBalanceHttp response for accountId",
+                  accountId,
+                  resp,
+                );
                 const d = resp?.data;
                 if (d) {
                   setCompanyBalance({
@@ -198,25 +340,29 @@ export default function DashboardPage() {
                     pending: Number(d.pending || 0),
                   });
                 } else {
-                  setCompanyError('No balance data');
+                  setCompanyError("No balance data");
                 }
               } catch (err) {
-                console.error('Failed to fetch account balance (HTTP) for accountId', accountId, err);
-                setCompanyError('Error fetching balance');
+                console.error(
+                  "Failed to fetch account balance (HTTP) for accountId",
+                  accountId,
+                  err,
+                );
+                setCompanyError("Error fetching balance");
               } finally {
                 setCompanyLoading(false);
               }
             } else {
-              console.warn('No accountId found in company/account_details');
-              setCompanyError('Missing accountId');
+              console.warn("No accountId found in company/account_details");
+              setCompanyError("Missing accountId");
             }
           } else {
-            console.warn('company/account_details does not exist');
-            setCompanyError('No account details');
+            console.warn("company/account_details does not exist");
+            setCompanyError("No account details");
           }
         } catch (err) {
-          console.error('Failed to load company account details', err);
-          setCompanyError('Failed to load account details');
+          console.error("Failed to load company account details", err);
+          setCompanyError("Failed to load account details");
         }
 
         setError(null);
@@ -249,22 +395,34 @@ export default function DashboardPage() {
       return d ? d >= start : false;
     });
   }, [transactions, selectedPeriod]);
-
   const stats = useMemo(() => {
     const deposits = filteredByPeriod
-      .filter((t) => t.type === "deposit" && (t.status === "success" || t.status === "successful"))
+      .filter(
+        (t) =>
+          t.type === "deposit" &&
+          (t.status === "success" || t.status === "successful"),
+      )
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const withdrawals = filteredByPeriod
-      .filter((t) => t.type === "withdrawal" && (t.status === "success" || t.status === "successful"))
+      .filter(
+        (t) =>
+          t.type === "withdrawal" &&
+          (t.status === "success" || t.status === "successful"),
+      )
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const transfers = filteredByPeriod
-      .filter((t) => t.type === "transfer" && (t.status === "success" || t.status === "successful"))
+      .filter(
+        (t) =>
+          t.type === "transfer" &&
+          (t.status === "success" || t.status === "successful"),
+      )
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
     const pendingWithdrawals = filteredByPeriod
       .filter((t) => t.type === "withdrawal" && t.status === "pending")
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
     return {
+      totalAssets, // Add total assets here
       balance: deposits - withdrawals,
       deposits,
       withdrawals,
@@ -273,7 +431,7 @@ export default function DashboardPage() {
       users: users.length,
       transactions: filteredByPeriod.length,
     };
-  }, [filteredByPeriod, users.length]);
+  }, [filteredByPeriod, users.length, totalAssets]);
 
   const weeklyData = useMemo(() => {
     const now = new Date();
@@ -296,25 +454,22 @@ export default function DashboardPage() {
   }, [transactions]);
 
   const recentTransactions = useMemo(() => {
-    const sorted = [...transactions]
-      .sort((a, b) => {
-        const ad = a.date ? new Date(a.date).getTime() : 0;
-        const bd = b.date ? new Date(b.date).getTime() : 0;
-        return bd - ad;
-      });
+    const sorted = [...transactions].sort((a, b) => {
+      const ad = a.date ? new Date(a.date).getTime() : 0;
+      const bd = b.date ? new Date(b.date).getTime() : 0;
+      return bd - ad;
+    });
 
     const start = (currentPage - 1) * pageSize;
-    return sorted
-      .slice(start, start + pageSize)
-      .map((t) => ({
-        id: t.id,
-        user: t.userName || t.userId || "Unknown",
-        type: t.type,
-        amount: Number(t.amount) || 0,
-        status: t.status,
-        date: t.date ? new Date(t.date).toLocaleString() : "N/A",
-        currency: (t as any).currency,
-      }));
+    return sorted.slice(start, start + pageSize).map((t) => ({
+      id: t.id,
+      user: t.userName || t.userId || "Unknown",
+      type: t.type,
+      amount: Number(t.amount) || 0,
+      status: t.status,
+      date: t.date ? new Date(t.date).toLocaleString() : "N/A",
+      currency: (t as any).currency,
+    }));
   }, [transactions, pageSize, currentPage]);
 
   const totalTransactions = transactions.length;
@@ -325,7 +480,9 @@ export default function DashboardPage() {
       {/* Header */}
       <div className="flex flex-col gap-4">
         <div>
-          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">Dashboard</h1>
+          <h1 className="text-2xl sm:text-3xl font-bold text-gray-900 dark:text-gray-100">
+            Dashboard
+          </h1>
           <p className="text-sm sm:text-base text-gray-500 dark:text-gray-400 mt-1">
             Welcome back! Here&apos;s what&apos;s happening.
           </p>
@@ -334,19 +491,21 @@ export default function DashboardPage() {
         {/* Date Period Filter */}
         <div className="flex items-center gap-1 sm:gap-2 bg-white dark:bg-gray-800 rounded-lg border border-gray-200 dark:border-gray-700 p-1 overflow-x-auto">
           <Calendar className="w-4 h-4 text-gray-400 ml-1 sm:ml-2 flex-shrink-0" />
-          {(["today", "week", "month", "year"] as DatePeriod[]).map((period) => (
-            <button
-              key={period}
-              onClick={() => setSelectedPeriod(period)}
-              className={`px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
-                selectedPeriod === period
-                  ? "bg-blue-600 text-white"
-                  : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
-              }`}
-            >
-              {periodLabels[period]}
-            </button>
-          ))}
+          {(["today", "week", "month", "year"] as DatePeriod[]).map(
+            (period) => (
+              <button
+                key={period}
+                onClick={() => setSelectedPeriod(period)}
+                className={`px-2 sm:px-4 py-2 rounded-md text-xs sm:text-sm font-medium transition-all whitespace-nowrap ${
+                  selectedPeriod === period
+                    ? "bg-blue-600 text-white"
+                    : "text-gray-600 dark:text-gray-400 hover:bg-gray-100 dark:hover:bg-gray-700"
+                }`}
+              >
+                {periodLabels[period]}
+              </button>
+            ),
+          )}
         </div>
       </div>
 
@@ -354,88 +513,118 @@ export default function DashboardPage() {
       {loading ? (
         <SkeletonGrid count={4} />
       ) : (
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-        <StatsCard
-          title="Total Transactions"
-          value={loading ? '...' : stats.transactions}
-          icon={<Wallet className="w-6 h-6" />}
-          trend={{ value: 12.5, isPositive: true }}
-        />
-
-        {/* Company Wallet Balance Card */}
-        <StatsCard
-          title="Company Wallet"
-          value={loading || companyLoading ? 'Loading...' : companyBalance ? formatAmount(companyBalance.availableBalance / 100) : (companyError ? 'Error' : 'N/A')}
-          icon={<Wallet className="w-6 h-6" />}
-          subtitle={
-            companyTransfer ? (
-              <div className="flex items-center gap-2 text-sm text-gray-500">
-                <span>{companyTransfer.bankName || ''}{companyTransfer.bankName && companyTransfer.accountNumber ? ' • ' : ''}</span>
-                <span className="font-mono">{companyTransfer.accountNumber || ''}</span>
-                {companyTransfer.accountNumber && (
-                  <button
-                    onClick={async () => {
-                      try {
-                        await navigator.clipboard.writeText(String(companyTransfer.accountNumber));
-                        setCopiedAccount(true);
-                        setTimeout(() => setCopiedAccount(false), 2000);
-                        console.log('Copied account number to clipboard');
-                      } catch (err) {
-                        console.error('Failed to copy account number', err);
-                      }
-                    }}
-                    className="ml-1 text-gray-400 hover:text-gray-600"
-                    aria-label="Copy account number"
-                    type="button"
-                  >
-                    <Copy className="w-4 h-4" />
-                  </button>
-                )}
-                {copiedAccount && <span className="text-xs text-green-600 ml-2">Copied</span>}
-                {companyError && <span className="text-xs text-red-600 ml-2">{companyError}</span>}
-              </div>
-            ) : (
-              <span>{loading ? '...' : 'No account'}</span>
-            )
-          }
-        />
-        <StatsCard
-          title="Total Deposits"
-          value={loading ? '...' : `₦${stats.deposits.toLocaleString()}`}
-          icon={<TrendingUp className="w-6 h-6" />}
-          trend={{ value: 8.3, isPositive: true }}
-        />
-        <StatsCard
-          title="Total Withdrawals"
-          value={loading ? '...' : `₦${stats.withdrawals.toLocaleString()}`}
-          icon={<TrendingDown className="w-6 h-6" />}
-          trend={{ value: 3.2, isPositive: false }}
-        />
-        <StatsCard
-          title="Total Transfers"
-          value={loading ? '...' : `₦${stats.transfers.toLocaleString()}`}
-          icon={<ArrowRightLeft className="w-6 h-6" />}
-          subtitle={`${periodLabels[selectedPeriod]}`}
-        />
-        <StatsCard
-          title="Pending Withdrawals"
-          value={loading ? '...' : `₦${stats.pendingWithdrawals.toLocaleString()}`}
-          icon={<Clock className="w-6 h-6" />}
-          subtitle={`${periodLabels[selectedPeriod]}`}
-        />
-        <StatsCard
-          title="Total Users"
-          value={loading ? '...' : stats.users}
-          icon={<Users className="w-6 h-6" />}
-          trend={{ value: 15.8, isPositive: true }}
-        />
-        <StatsCard
-          title="Transactions"
-          value={loading ? '...' : stats.transactions}
-          icon={<Receipt className="w-6 h-6" />}
-          subtitle={`${periodLabels[selectedPeriod]}`}
-        />
-      </div>
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
+          <StatsCard
+            title="Total Assets (₦)"
+            value={assetsLoading ? "..." : totalAssets.toLocaleString()}
+            icon={<Wallet className="w-6 h-6" />}
+            trend={{ value: 12.5, isPositive: true }}
+          />
+          <StatsCard
+            title="Total Transactions"
+            value={loading ? "..." : stats.transactions}
+            icon={<Wallet className="w-6 h-6" />}
+            trend={{ value: 12.5, isPositive: true }}
+          />
+          {/* Company Wallet Balance Card */}
+          <StatsCard
+            title="Company Wallet"
+            value={
+              loading || companyLoading
+                ? "Loading..."
+                : companyBalance
+                  ? formatAmount(companyBalance.availableBalance / 100)
+                  : companyError
+                    ? "Error"
+                    : "N/A"
+            }
+            icon={<Wallet className="w-6 h-6" />}
+            subtitle={
+              companyTransfer ? (
+                <div className="flex items-center gap-2 text-sm text-gray-500">
+                  <span>
+                    {companyTransfer.bankName || ""}
+                    {companyTransfer.bankName && companyTransfer.accountNumber
+                      ? " • "
+                      : ""}
+                  </span>
+                  <span className="font-mono">
+                    {companyTransfer.accountNumber || ""}
+                  </span>
+                  {companyTransfer.accountNumber && (
+                    <button
+                      onClick={async () => {
+                        try {
+                          await navigator.clipboard.writeText(
+                            String(companyTransfer.accountNumber),
+                          );
+                          setCopiedAccount(true);
+                          setTimeout(() => setCopiedAccount(false), 2000);
+                          console.log("Copied account number to clipboard");
+                        } catch (err) {
+                          console.error("Failed to copy account number", err);
+                        }
+                      }}
+                      className="ml-1 text-gray-400 hover:text-gray-600"
+                      aria-label="Copy account number"
+                      type="button"
+                    >
+                      <Copy className="w-4 h-4" />
+                    </button>
+                  )}
+                  {copiedAccount && (
+                    <span className="text-xs text-green-600 ml-2">Copied</span>
+                  )}
+                  {companyError && (
+                    <span className="text-xs text-red-600 ml-2">
+                      {companyError}
+                    </span>
+                  )}
+                </div>
+              ) : (
+                <span>{loading ? "..." : "No account"}</span>
+              )
+            }
+          />
+          <StatsCard
+            title="Total Deposits"
+            value={loading ? "..." : `₦${stats.deposits.toLocaleString()}`}
+            icon={<TrendingUp className="w-6 h-6" />}
+            trend={{ value: 8.3, isPositive: true }}
+          />
+          <StatsCard
+            title="Total Withdrawals"
+            value={loading ? "..." : `₦${stats.withdrawals.toLocaleString()}`}
+            icon={<TrendingDown className="w-6 h-6" />}
+            trend={{ value: 3.2, isPositive: false }}
+          />
+          <StatsCard
+            title="Total Transfers"
+            value={loading ? "..." : `₦${stats.transfers.toLocaleString()}`}
+            icon={<ArrowRightLeft className="w-6 h-6" />}
+            subtitle={`${periodLabels[selectedPeriod]}`}
+          />
+          <StatsCard
+            title="Pending Withdrawals"
+            value={
+              loading ? "..." : `₦${stats.pendingWithdrawals.toLocaleString()}`
+            }
+            icon={<Clock className="w-6 h-6" />}
+            subtitle={`${periodLabels[selectedPeriod]}`}
+          />
+          <StatsCard
+            title="Total Users"
+            value={loading ? "..." : stats.users}
+            icon={<Users className="w-6 h-6" />}
+            trend={{ value: 15.8, isPositive: true }}
+          />
+          <StatsCard
+            title="Transactions"
+            value={loading ? "..." : stats.transactions}
+            icon={<Receipt className="w-6 h-6" />}
+            subtitle={`${periodLabels[selectedPeriod]}`}
+          />
+        </div>
       )}
 
       {/* Weekly Activity Chart */}
@@ -451,14 +640,18 @@ export default function DashboardPage() {
               stroke="#9ca3af"
               tickFormatter={(value: number) => `₦${value.toLocaleString()}`}
             />
-            <Tooltip
-              formatter={(value: number) => [`₦${value.toLocaleString()}`, 'Amount']}
-              contentStyle={{
-                backgroundColor: "#fff",
-                border: "1px solid #e5e7eb",
-                borderRadius: "8px",
-              }}
-            />
+           <Tooltip
+  formatter={(value) => [
+    `₦${Number(value).toLocaleString()}`,
+    "Amount",
+  ]}
+  contentStyle={{
+    backgroundColor: "#fff",
+    border: "1px solid #e5e7eb",
+    borderRadius: "8px",
+  }}
+/>
+
             <Line
               type="monotone"
               dataKey="amount"
@@ -520,17 +713,18 @@ export default function DashboardPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap">
-                     <span
-                       className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
-                         transaction.status === "success" || transaction.status === "successful"
-                           ? "bg-green-100 text-green-800"
-                           : transaction.status === "pending"
-                           ? "bg-yellow-100 text-yellow-800"
-                           : "bg-red-100 text-red-800"
-                       }`}
-                     >
-                       {transaction.status}
-                     </span>
+                    <span
+                      className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${
+                        transaction.status === "success" ||
+                        transaction.status === "successful"
+                          ? "bg-green-100 text-green-800"
+                          : transaction.status === "pending"
+                            ? "bg-yellow-100 text-yellow-800"
+                            : "bg-red-100 text-red-800"
+                      }`}
+                    >
+                      {transaction.status}
+                    </span>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     {transaction.date}
@@ -560,7 +754,10 @@ export default function DashboardPage() {
               </select>
             </label>
             <span className="text-sm text-gray-600">
-              Showing {Math.min((currentPage - 1) * pageSize + 1, totalTransactions)}-{Math.min(currentPage * pageSize, totalTransactions)} of {totalTransactions}
+              Showing{" "}
+              {Math.min((currentPage - 1) * pageSize + 1, totalTransactions)}-
+              {Math.min(currentPage * pageSize, totalTransactions)} of{" "}
+              {totalTransactions}
             </span>
           </div>
           <div className="flex items-center gap-2">
@@ -599,7 +796,9 @@ export default function DashboardPage() {
               })}
             </div>
             <button
-              onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+              onClick={() =>
+                setCurrentPage(Math.min(totalPages, currentPage + 1))
+              }
               disabled={currentPage === totalPages}
               className="px-3 py-1 border border-gray-300 rounded-lg text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-50"
             >

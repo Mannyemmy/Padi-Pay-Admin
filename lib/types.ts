@@ -5,7 +5,7 @@ export interface User {
   email: string;
   phone: string;
   status?: "active" | "inactive" | "suspended";
-  role?: 'agent' | string;
+  role?: "agent" | string;
   referralCode?: string;
   referralCount?: number;
   referredBy?: string | null;
@@ -64,7 +64,7 @@ export interface User {
     type?: string;
     description?: string;
     fileName?: string;
-    status?: 'pending' | 'submitted' | 'approved' | 'rejected';
+    status?: "pending" | "submitted" | "approved" | "rejected";
     storagePath?: string;
   }>;
 
@@ -116,13 +116,15 @@ export interface Business {
       name?: string;
       path?: string;
     };
-    [key: string]: {
-      name?: string;
-      path?: string;
-      textData?: string;
-      number?: string;
-      value?: string;
-    } | undefined;
+    [key: string]:
+      | {
+          name?: string;
+          path?: string;
+          textData?: string;
+          number?: string;
+          value?: string;
+        }
+      | undefined;
   };
 
   requiredDocuments?: Array<{
@@ -192,18 +194,21 @@ export interface Transaction {
   [key: string]: any;
 }
 
-export type AdminRole = "admin" | "customer_service";
-
+export type AdminRole = "admin" | "customer_service" | "compliance_officer";
+// lib/types.ts
 export interface Admin {
   id: string;
   name: string;
   email: string;
   role: AdminRole;
-  createdAt?: Date;
-  lastLoginAt?: Date;
   status: "active" | "inactive";
+  lastLoginAt?: number;
+  createdAt: number;
+  // Add permissions object
+  permissions?: {
+    [route: string]: boolean;
+  };
 }
-
 export interface DashboardStats {
   totalBalance: number;
   totalDeposits: number;
@@ -221,7 +226,7 @@ export interface Settings {
   primaryColor: string;
   accentColor: string;
   buttonRadius: number;
-  defaultTheme: 'light' | 'dark' | 'system';
+  defaultTheme: "light" | "dark" | "system";
   compactMode: boolean;
   enableShadows: boolean;
 }
@@ -231,8 +236,8 @@ export interface Communication {
   title: string;
   body: string;
   audience: string;
-  channels: Array<'email' | 'sms' | 'call'>;
-  status: 'sent' | 'scheduled' | 'draft';
+  channels: Array<"email" | "sms" | "call">;
+  status: "sent" | "scheduled" | "draft";
   sentAt?: Date;
   createdBy?: string;
 }
@@ -252,4 +257,28 @@ export interface Permission {
   canManageTransactions: boolean;
   canManageAdmins: boolean;
   canEditSettings: boolean;
+}
+
+// Define all available routes
+export type AdminRoute =
+  | "/"
+  | "/users"
+  | "/compliance-kyc"
+  | "/login-logs"
+  | "/blocked-logins"
+  | "/analytics"
+  | "/agents"
+  | "/transactions"
+  | "/referrals"
+  | "/communications"
+  | "/seo"
+  | "/admins"
+  | "/activity-logs"
+  | "/settings";
+
+export interface RouteInfo {
+  name: string;
+  href: AdminRoute;
+  icon: any;
+  category?: string;
 }
