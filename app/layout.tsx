@@ -7,6 +7,7 @@ import { ToastContainer } from "@/components/Toast";
 import { ThemeProvider } from "@/components/ThemeProvider";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
+import ActivityTrackingLayout from "@/components/layout/ActivityTrackingLayout";
 
 const inter = Inter({
   subsets: ["latin"],
@@ -56,11 +57,13 @@ export default function RootLayout({
   return (
     <html lang="en">
       <body className={`${inter.variable} font-sans antialiased bg-gray-50 dark:bg-gray-900`}>
+         <ActivityTrackingLayout>
         <ThemeProvider />
         <AuthProvider>
           <AppShell>{children}</AppShell>
           <ToastContainer />
         </AuthProvider>
+        </ActivityTrackingLayout>
       </body>
     </html>
   );

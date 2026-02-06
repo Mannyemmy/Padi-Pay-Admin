@@ -9,7 +9,7 @@ import {
 } from 'firebase/auth';
 import { httpsCallable } from 'firebase/functions';
 import { doc, getDoc } from 'firebase/firestore';
-import { recordAdminLogin, upsertAdminProfile, getAdmin } from './firestore';
+import { recordAdminLogin, upsertAdminProfile } from './firestore';
 import { Admin, AdminRole } from './types';
 import { defaultRolePermissions } from './routes';
 

@@ -282,3 +282,20 @@ export interface RouteInfo {
   icon: any;
   category?: string;
 }
+export interface ActivityLog {
+  id?: string;
+  adminId: string;
+  adminEmail: string;
+  adminName: string;
+  route: string;
+  action: 'page_view' | 'api_call' | 'login' | 'logout';
+  startTime: number; // timestamp in milliseconds
+  endTime?: number; // timestamp in milliseconds
+  duration?: number; // in milliseconds
+  userAgent?: string;
+  ipAddress?: string;
+  method?: string; // HTTP method for API calls
+  statusCode?: number; // HTTP status code
+  metadata?: Record<string, any>;
+  createdAt: number;
+}

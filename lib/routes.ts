@@ -16,7 +16,7 @@ export const allRoutes: RouteInfo[] = [
   { name: "Communications", href: "/communications", icon: Megaphone, category: "Marketing" },
   { name: "Seo", href: "/seo", icon: icons.Globe, category: "Marketing" },
   { name: "Admins", href: "/admins", icon: UserCog, category: "Administration" },
-  // {name:"Activity Logs", href:"/activity-logs", icon: icons.Activity, category: "Administration"},
+   {name:"Activity Logs", href:"/activity-logs", icon: icons.Activity, category: "Administration"},
   { name: "Settings", href: "/settings", icon: Settings, category: "Administration" },
 ];
 
