@@ -20,6 +20,7 @@ import {
   getDocs,
   doc,
   getDoc,
+  setDoc,
   updateDoc,
   serverTimestamp,
   where,
@@ -59,11 +60,37 @@ export default function ReferralsAdminPage() {
   const [pageSize, setPageSize] = useState<number>(10);
   const [currentPage, setCurrentPage] = useState<number>(1);
   const [copiedCode, setCopiedCode] = useState<string>("");
+  const [minTransactionAmount, setMinTransactionAmount] = useState<number>(0);
+  const [settingsLoading, setSettingsLoading] = useState<boolean>(true);
 
   // New states for editing earnings
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [newEarnings, setNewEarnings] = useState<number>(0);
   const [savingEarnings, setSavingEarnings] = useState(false);
+
+  // Load referral settings from Firestore
+  useEffect(() => {
+    const loadSettings = async () => {
+      try {
+        setSettingsLoading(true);
+        const settingsDoc = await getDoc(doc(db, "settings", "referrals"));
+        if (settingsDoc.exists()) {
+          const data = settingsDoc.data();
+          if (typeof data.bonusPerReferral === "number") {
+            setReferralBonus(data.bonusPerReferral);
+          }
+          if (typeof data.minTransactionAmount === "number") {
+            setMinTransactionAmount(data.minTransactionAmount);
+          }
+        }
+      } catch (err) {
+        console.error("Failed to load referral settings", err);
+      } finally {
+        setSettingsLoading(false);
+      }
+    };
+    loadSettings();
+  }, []);
 
   // Fetch all users with referral data
   useEffect(() => {
@@ -129,15 +156,24 @@ export default function ReferralsAdminPage() {
     fetchReferralData();
   }, [referralBonus]);
 
-  // Update global referral bonus (placeholder)
+  // Save referral settings to Firestore
   const updateReferralBonus = async () => {
     if (updatingBonus) return;
 
     try {
       setUpdatingBonus(true);
-      alert(`Referral bonus updated to ₦${referralBonus}`);
+      await setDoc(
+        doc(db, "settings", "referrals"),
+        {
+          bonusPerReferral: referralBonus,
+          minTransactionAmount,
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
     } catch (err) {
-      alert("Failed to update bonus");
+      console.error("Failed to update referral settings", err);
+      alert("Failed to save settings");
     } finally {
       setUpdatingBonus(false);
     }
@@ -265,27 +301,47 @@ export default function ReferralsAdminPage() {
         </div>
 
         <div className="bg-gradient-to-r from-purple-500 to-purple-600 text-white rounded-xl p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-purple-100">Current Bonus per Referral</p>
-              <div className="flex items-center gap-3 mt-3">
-                <input
-                  type="number"
-                  value={referralBonus}
-                  onChange={(e) => setReferralBonus(Number(e.target.value))}
-                  className="w-32 px-3 py-2 bg-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
-                  placeholder="Amount"
-                />
-                <button
-                  onClick={updateReferralBonus}
-                  disabled={updatingBonus}
-                  className="px-4 py-2 bg-white text-purple-600 rounded-lg font-medium hover:bg-white/90 transition"
-                >
-                  {updatingBonus ? "Saving..." : "Update"}
-                </button>
-              </div>
+          <div className="flex items-start justify-between gap-4">
+            <div className="flex-1 space-y-3">
+              <p className="text-purple-100 font-medium">Referral Settings</p>
+              {settingsLoading ? (
+                <div className="flex items-center gap-2 text-purple-200">
+                  <Loader className="w-4 h-4 animate-spin" />
+                  <span className="text-sm">Loading...</span>
+                </div>
+              ) : (
+                <>
+                  <div>
+                    <label className="text-xs text-purple-200">Bonus per Referral (₦)</label>
+                    <input
+                      type="number"
+                      value={referralBonus}
+                      onChange={(e) => setReferralBonus(Number(e.target.value))}
+                      className="w-full mt-1 px-3 py-2 bg-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
+                      placeholder="e.g. 500"
+                    />
+                  </div>
+                  <div>
+                    <label className="text-xs text-purple-200">Min. Transaction for Referee to Qualify (₦)</label>
+                    <input
+                      type="number"
+                      value={minTransactionAmount}
+                      onChange={(e) => setMinTransactionAmount(Number(e.target.value))}
+                      className="w-full mt-1 px-3 py-2 bg-white/20 rounded-lg text-white placeholder-white/60 focus:outline-none focus:ring-2 focus:ring-white/50"
+                      placeholder="e.g. 1000"
+                    />
+                  </div>
+                  <button
+                    onClick={updateReferralBonus}
+                    disabled={updatingBonus}
+                    className="w-full px-4 py-2 bg-white text-purple-600 rounded-lg font-medium hover:bg-white/90 transition"
+                  >
+                    {updatingBonus ? "Saving..." : "Save Settings"}
+                  </button>
+                </>
+              )}
             </div>
-            <TrendingUp className="w-12 h-12 opacity-80" />
+            <TrendingUp className="w-10 h-10 opacity-80 mt-1 shrink-0" />
           </div>
         </div>
       </div>
