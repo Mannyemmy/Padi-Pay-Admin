@@ -383,7 +383,7 @@ export default function LoginLogsPage() {
     manufacturer: log.deviceInfo.manufacturer,
     networkType: log.networkType,
     userAgent: log.userAgent,
-    timestamp: log.timestamp.toDate().toISOString(),
+    timestamp: toDate(log.timestamp).toISOString(),
     loginMethod: log.loginMethod,
     deviceType: log.deviceType
   }));
@@ -755,7 +755,7 @@ export default function LoginLogsPage() {
                         {formatDate(log.timestamp)}
                       </div>
                       <div className="text-xs text-gray-500">
-                        {log.timestamp.toDate().toLocaleDateString()}
+                        {toDate(log.timestamp).toLocaleDateString()}
                       </div>
                     </td>
                     <td className="px-6 py-4">
