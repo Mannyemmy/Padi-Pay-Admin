@@ -15,6 +15,7 @@ import { useState, useEffect } from "react";
 import { getCurrentAdmin, signOutAdmin } from "@/lib/auth";
 import { Admin } from "@/lib/types";
 import { allRoutes } from "@/lib/routes";
+import { DEMO_PREFIX } from "@/lib/demo";
 import { activityLogger } from "@/lib/services/activityLogger";
 import { auth, db } from "@/lib/firebase";
 import { doc, getDoc } from "firebase/firestore";
@@ -36,6 +37,11 @@ export default function Sidebar() {
     [],
   );
   const [loading, setLoading] = useState(true);
+
+  // Detect demo mode from pathname prefix
+  const isDemoRoute = pathname.startsWith(DEMO_PREFIX);
+  const basePath = isDemoRoute ? pathname.slice(DEMO_PREFIX.length) || '/' : pathname;
+  const routePrefix = isDemoRoute ? DEMO_PREFIX : '';
 
   useEffect(() => {
     const loadAdminData = async () => {
@@ -224,6 +230,7 @@ export default function Sidebar() {
                   >
                     Admin
                   </p>
+
                 </div>
               </>
             )}
@@ -262,11 +269,12 @@ export default function Sidebar() {
                 )}
                 <div className="space-y-1">
                   {routes.map((item) => {
-                    const isActive = pathname === item.href;
+                    const prefixedHref = `${routePrefix}${item.href}`;
+                    const isActive = basePath === item.href;
                     return (
                       <Link
                         key={item.name}
-                        href={item.href}
+                        href={prefixedHref}
                         onClick={() => setIsMobileMenuOpen(false)}
                         className={`
                           flex items-center gap-3 px-3 py-2.5 rounded-lg

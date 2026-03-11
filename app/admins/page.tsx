@@ -30,6 +30,7 @@ import {
   updateAdminAccount,
 } from "@/lib/auth";
 import { allRoutes, defaultRolePermissions } from "@/lib/routes";
+import { useDemoMode } from "@/lib/demo";
 
 // Role icons and colors
 const roleIcons: Record<AdminRole, typeof Shield> = {
@@ -45,6 +46,8 @@ const roleColors: Record<AdminRole, string> = {
 };
 
 export default function AdminsPage() {
+  const demoMode = useDemoMode();
+  const mockOpts = demoMode ? { mock: true } : undefined;
   const [admins, setAdmins] = useState<Admin[]>([]);
   const [searchTerm, setSearchTerm] = useState("");
   const [showAddModal, setShowAddModal] = useState(false);
@@ -99,7 +102,7 @@ export default function AdminsPage() {
   const loadAdmins = async () => {
     try {
       setLoading(true);
-      const data = await getAdmins();
+      const data = await getAdmins(mockOpts);
       const adminsWithPermissions = data.map((admin) => ({
         ...admin,
         permissions: admin.permissions || defaultRolePermissions[admin.role],

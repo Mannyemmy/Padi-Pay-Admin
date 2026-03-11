@@ -25,20 +25,28 @@ import {
 } from "./types";
 import { httpsCallable } from "firebase/functions";
 
+export interface MockFilterOptions {
+  mock?: boolean;
+}
+
 // USER OPERATIONS
-export async function getUsers() {
-  const q = query(collection(db, "users"), orderBy("createdAt", "desc"));
+export async function getUsers(options?: MockFilterOptions) {
+  const constraints: any[] = [orderBy("createdAt", "desc")];
+  if (options?.mock) constraints.unshift(where("mock", "==", true));
+  const q = query(collection(db, "users"), ...constraints);
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => {
-    const data = doc.data();
-    return {
-      id: doc.id,
-      ...data,
-      createdAt: data.createdAt?.toDate
-        ? data.createdAt.toDate()
-        : data.createdAt,
-    } as User;
-  });
+  return snapshot.docs
+    .map((doc) => {
+      const data = doc.data();
+      return {
+        id: doc.id,
+        ...data,
+        createdAt: data.createdAt?.toDate
+          ? data.createdAt.toDate()
+          : data.createdAt,
+      } as User;
+    })
+    .filter((u) => (options?.mock ? true : !(u as any).mock));
 }
 
 export async function getUser(userId: string) {
@@ -75,19 +83,26 @@ export async function setUserRole(userId: string, role?: string | null) {
 }
 
 // TRANSACTION OPERATIONS
-export async function getTransactions() {
+export async function getTransactions(options?: MockFilterOptions) {
   // Some documents lack a uniform 'date' field; fetch all and sort client-side using known date/timestamp fields.
-  const snapshot = await getDocs(collection(db, "transactions"));
-  const items = snapshot.docs.map((docSnap) => {
-    const data = docSnap.data() as Transaction;
-    const dateVal = data.timestamp || data.date || data.createdAt;
-    const date = dateVal?.toDate ? dateVal.toDate() : new Date(dateVal);
-    return {
-      ...data,
-      id: docSnap.id,
-      date,
-    } as Transaction;
-  });
+  const constraints: any[] = [];
+  if (options?.mock) constraints.push(where("mock", "==", true));
+  const q = constraints.length
+    ? query(collection(db, "transactions"), ...constraints)
+    : collection(db, "transactions");
+  const snapshot = await getDocs(q);
+  const items = snapshot.docs
+    .map((docSnap) => {
+      const data = docSnap.data() as Transaction;
+      const dateVal = data.timestamp || data.date || data.createdAt;
+      const date = dateVal?.toDate ? dateVal.toDate() : new Date(dateVal);
+      return {
+        ...data,
+        id: docSnap.id,
+        date,
+      } as Transaction;
+    })
+    .filter((t) => (options?.mock ? true : !(t as any).mock));
 
   return items.sort((a, b) => {
     const ad = a.date ? new Date(a.date).getTime() : 0;
@@ -102,10 +117,12 @@ export async function getTransaction(transactionId: string) {
   return docSnap.exists() ? { id: docSnap.id, ...docSnap.data() } : null;
 }
 
-export async function getTransactionsByUser(userId: string) {
+export async function getTransactionsByUser(userId: string, options?: MockFilterOptions) {
+  const constraints: any[] = [where("userId", "==", userId)];
+  if (options?.mock) constraints.push(where("mock", "==", true));
   const q = query(
     collection(db, "transactions"),
-    where("userId", "==", userId),
+    ...constraints,
   );
   const snapshot = await getDocs(q);
   const items = snapshot.docs.map((docSnap) => {
@@ -133,10 +150,12 @@ export async function getTransactionsByUser(userId: string) {
     .slice(0, 20);
 }
 
-export async function getTransactionStatsByUser(userId: string) {
+export async function getTransactionStatsByUser(userId: string, options?: MockFilterOptions) {
+  const constraints: any[] = [where("userId", "==", userId)];
+  if (options?.mock) constraints.push(where("mock", "==", true));
   const q = query(
     collection(db, "transactions"),
-    where("userId", "==", userId),
+    ...constraints,
   );
   const snapshot = await getDocs(q);
   let total = 0;
@@ -154,11 +173,15 @@ export async function getTransactionStatsByUser(userId: string) {
   return { total, count };
 }
 
-export async function getReferralsByReferrer(referrerUid: string) {
-  const q = query(
-    collection(db, "referrals"),
+export async function getReferralsByReferrer(referrerUid: string, options?: MockFilterOptions) {
+  const constraints: any[] = [
     where("referrerUid", "==", referrerUid),
     orderBy("createdAt", "desc"),
+  ];
+  if (options?.mock) constraints.unshift(where("mock", "==", true));
+  const q = query(
+    collection(db, "referrals"),
+    ...constraints,
   );
   const snapshot = await getDocs(q);
   return snapshot.docs.map((docSnap) => {
@@ -196,8 +219,12 @@ export async function updateTransactionStatus(
 }
 
 // ADMIN OPERATIONS
-export async function getAdmins() {
-  const q = query(collection(db, "admins"));
+export async function getAdmins(options?: MockFilterOptions) {
+  const constraints: any[] = [];
+  if (options?.mock) constraints.push(where("mock", "==", true));
+  const q = constraints.length
+    ? query(collection(db, "admins"), ...constraints)
+    : query(collection(db, "admins"));
   const snapshot = await getDocs(q);
   return snapshot.docs.map((docSnap) => {
     const data = docSnap.data();
@@ -291,10 +318,10 @@ export async function updateSettings(settings: Record<string, unknown>) {
 }
 
 // DASHBOARD STATISTICS
-export async function getDashboardStats(): Promise<DashboardStats> {
+export async function getDashboardStats(options?: MockFilterOptions): Promise<DashboardStats> {
   // Fetch all necessary data from Firestore and calculate stats
-  const users = await getUsers();
-  const transactions = await getTransactions();
+  const users = await getUsers(options);
+  const transactions = await getTransactions(options);
 
   const deposits = transactions
     .filter((t) => t.type === "deposit" && t.status === "success")
@@ -329,13 +356,19 @@ export async function getDashboardStats(): Promise<DashboardStats> {
 }
 
 // BUSINESS OPERATIONS
-export async function getBusinesses() {
-  const q = query(collection(db, "businesses"));
+export async function getBusinesses(options?: MockFilterOptions) {
+  const constraints: any[] = [];
+  if (options?.mock) constraints.push(where("mock", "==", true));
+  const q = constraints.length
+    ? query(collection(db, "businesses"), ...constraints)
+    : query(collection(db, "businesses"));
   const snapshot = await getDocs(q);
-  return snapshot.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-  })) as Business[];
+  return snapshot.docs
+    .map((doc) => ({
+      id: doc.id,
+      ...doc.data(),
+    }))
+    .filter((b) => (options?.mock ? true : !(b as any).mock)) as Business[];
 }
 
 export async function getBusiness(businessId: string) {

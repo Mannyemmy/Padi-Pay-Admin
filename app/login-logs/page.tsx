@@ -26,10 +26,11 @@ import {
   Info,
   Phone
 } from 'lucide-react';
-import { collection, getDocs, query, orderBy, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, Timestamp, where } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/Toast';
 import { ExportMenu } from '@/components/ExportMenu';
+import { useDemoMode } from '@/lib/demo';
 
 type LoginStatus = 'success' | 'failed';
 type LoginMethod = 'email_password' | 'biometric' | 'unknown';
@@ -72,6 +73,7 @@ interface LoginMetrics {
 }
 
 export default function LoginLogsPage() {
+  const demoMode = useDemoMode();
   const [loginLogs, setLoginLogs] = useState<LoginLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -104,7 +106,9 @@ export default function LoginLogsPage() {
       try {
         setLoading(true);
         const logsRef = collection(db, 'loginLogs');
-        const q = query(logsRef, orderBy('timestamp', 'desc'));
+        const constraints: any[] = [orderBy('timestamp', 'desc')];
+        if (demoMode) constraints.unshift(where('mock', '==', true));
+        const q = query(logsRef, ...constraints);
         const querySnapshot = await getDocs(q);
         
         const logs: LoginLog[] = [];

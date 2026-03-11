@@ -20,6 +20,11 @@ export async function middleware(request: NextRequest) {
     return NextResponse.next();
   }
 
+  // Skip inspect page - temporary data viewer
+  if (pathname === '/inspect') {
+    return NextResponse.next();
+  }
+
   try {
     const admin = await getCurrentAdmin();
     
@@ -32,7 +37,10 @@ export async function middleware(request: NextRequest) {
     }
 
     // Check if admin has access to the requested route
-    const hasAccess = admin.permissions?.[pathname as keyof typeof admin.permissions];
+    // Strip /admin/v2 prefix for permission checking (demo mode uses same permissions)
+    const DEMO_PREFIX = '/admin/v2';
+    const basePath = pathname.startsWith(DEMO_PREFIX) ? (pathname.slice(DEMO_PREFIX.length) || '/') : pathname;
+    const hasAccess = admin.permissions?.[basePath as keyof typeof admin.permissions];
     
     if (!hasAccess) {
       // Log unauthorized access attempt

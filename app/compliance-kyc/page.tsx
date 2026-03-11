@@ -24,6 +24,7 @@ import { getUsers, getBusinesses } from '@/lib/firestore';
 import { showToast } from '@/components/Toast';
 import { ExportMenu } from '@/components/ExportMenu';
 import { User, Business } from '@/lib/types';
+import { useDemoMode } from '@/lib/demo';
 
 type VerificationStatus = 'verified' | 'pending' | 'failed' | 'not_submitted';
 type VerificationType = 'bvn' | 'nin' | 'liveness' | 'business_registration' | 'unknown';
@@ -68,6 +69,8 @@ interface KYCUser {
 }
 
 export default function CompliancePage() {
+  const demoMode = useDemoMode();
+  const mockOpts = demoMode ? { mock: true } : undefined;
   const [users, setUsers] = useState<User[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
   const [loading, setLoading] = useState(true);
@@ -96,8 +99,8 @@ export default function CompliancePage() {
       try {
         setLoading(true);
         const [usersData, businessesData] = await Promise.all([
-          getUsers(),
-          getBusinesses(),
+          getUsers(mockOpts),
+          getBusinesses(mockOpts),
         ]);
         setUsers(usersData);
         setBusinesses(businessesData);

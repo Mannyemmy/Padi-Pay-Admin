@@ -7,6 +7,7 @@ import { getTransactions, getUsers, getBusinesses, getTransactionsByUser } from 
 import { ExportMenu } from '@/components/ExportMenu';
 import { Pagination } from '@/components/Pagination';
 import { EmptyState } from '@/components/EmptyState';
+import { useDemoMode } from '@/lib/demo';
 
 type RawTxn = Record<string, unknown>;
 
@@ -64,6 +65,8 @@ const formatTransactionType = (type?: string): string => {
 };
 
 export default function TransactionsPage() {
+  const demoMode = useDemoMode();
+  const mockOpts = demoMode ? { mock: true } : undefined;
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [users, setUsers] = useState<User[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -86,9 +89,9 @@ export default function TransactionsPage() {
       try {
         setLoading(true);
         const [txns, usersData, businessesData] = await Promise.all([
-          getTransactions(),
-          getUsers(),
-          getBusinesses(),
+          getTransactions(mockOpts),
+          getUsers(mockOpts),
+          getBusinesses(mockOpts),
         ]);
 
         const userMap = new Map(usersData.map((u) => [u.id, u]));

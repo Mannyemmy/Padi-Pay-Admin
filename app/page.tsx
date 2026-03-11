@@ -73,6 +73,7 @@ async function fetchAccountBalanceHttp(
   return res.json();
 }
 import { Business, Transaction, User } from "@/lib/types";
+import { useDemoMode } from "@/lib/demo";
 
 type DatePeriod = "today" | "week" | "month" | "year";
 type RawTxn = Record<string, unknown>;
@@ -136,6 +137,8 @@ const pickDate = (obj: RawTxn, ...keys: string[]) => {
 };
 
 export default function DashboardPage() {
+  const demoMode = useDemoMode();
+  const mockOpts = demoMode ? { mock: true } : undefined;
   const [selectedPeriod, setSelectedPeriod] = useState<DatePeriod>("week");
   const [transactions, setTransactions] = useState<Transaction[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -234,12 +237,12 @@ export default function DashboardPage() {
       try {
         setLoading(true);
         const [txns, usersData] = await Promise.all([
-          getTransactions(),
-          getUsers(),
+          getTransactions(mockOpts),
+          getUsers(mockOpts),
         ]);
 
         // Calculate total assets in parallel with other data processing
-        calculateTotalAssets();
+        if (!demoMode) calculateTotalAssets();
 
         const userMap = new Map(usersData.map((u) => [u.id, u]));
         const normalized = txns.map((t) => {
@@ -295,7 +298,8 @@ export default function DashboardPage() {
         setTransactions(normalized);
         setUsers(usersData);
 
-        // Fetch company account details and balance
+        // Fetch company account details and balance (skip in demo mode)
+        if (!demoMode) {
         try {
           const accountRef = doc(db, "company", "account_details");
           const accountSnap = await getDoc(accountRef);
@@ -364,6 +368,7 @@ export default function DashboardPage() {
           console.error("Failed to load company account details", err);
           setCompanyError("Failed to load account details");
         }
+        } // end if (!demoMode)
 
         setError(null);
       } catch (err) {

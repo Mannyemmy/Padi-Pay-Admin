@@ -22,11 +22,12 @@ import {
   Users,
   Building2
 } from 'lucide-react';
-import { collection, getDocs, query, orderBy, Timestamp, doc, updateDoc, deleteDoc, addDoc } from 'firebase/firestore';
+import { collection, getDocs, query, orderBy, Timestamp, doc, updateDoc, deleteDoc, addDoc, where as fsWhere } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
 import { showToast } from '@/components/Toast';
 import { ExportMenu } from '@/components/ExportMenu';
 import { formatDistanceToNow } from 'date-fns';
+import { useDemoMode } from '@/lib/demo';
 
 type BlockStatus = 'active' | 'expired' | 'manual';
 type AppType = 'business' | 'user' | 'all';
@@ -67,6 +68,7 @@ interface BlockMetrics {
 }
 
 export default function BlockedLoginsPage() {
+  const demoMode = useDemoMode();
   const [blockedLogins, setBlockedLogins] = useState<BlockedLogin[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -105,7 +107,9 @@ export default function BlockedLoginsPage() {
     try {
       setLoading(true);
       const logsRef = collection(db, 'blockedLogins');
-      const q = query(logsRef, orderBy('lastFailedAt', 'desc'));
+      const constraints: any[] = [orderBy('lastFailedAt', 'desc')];
+      if (demoMode) constraints.unshift(fsWhere('mock', '==', true));
+      const q = query(logsRef, ...constraints);
       const querySnapshot = await getDocs(q);
       
       const logs: BlockedLogin[] = [];

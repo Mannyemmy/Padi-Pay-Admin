@@ -1,7 +1,9 @@
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onCall, HttpsError} from "firebase-functions/v2/https";
+import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
+import {generateMockData, cleanupMockData} from "./mockDataGenerator";
 
 // Initialize Firebase Admin
 admin.initializeApp();
@@ -367,6 +369,121 @@ export const sendUserNotification = onCall(async (request) => {
       error: String(err),
     });
     throw new HttpsError("internal", "Failed to send notification");
+  }
+});
+
+// ── Mock Data Generation ────────────────────────────────────────────────
+
+/**
+ * Scheduled function: runs every 1 minute but only generates data when
+ * a randomised interval (2–6 minutes) has elapsed since the last run,
+ * simulating organic, non-uniform user activity.
+ */
+export const scheduledMockDataGeneration = onSchedule(
+  {schedule: "every 1 minutes", timeZone: "Africa/Lagos"},
+  async () => {
+    const db = admin.firestore();
+    const metaRef = db.collection("_internal").doc("mockSchedule");
+
+    try {
+      const metaSnap = await metaRef.get();
+      const now = Date.now();
+
+      if (metaSnap.exists) {
+        const data = metaSnap.data() as {
+          lastRunTime: number;
+          nextIntervalMs: number;
+        };
+        if (now - data.lastRunTime < data.nextIntervalMs) {
+          // Not enough time has passed – skip this invocation
+          return;
+        }
+      }
+
+      const result = await generateMockData({
+        users: 2,
+        transactionsPerUser: 3,
+        loginLogsPerUser: 2,
+        blockedLogins: 1,
+        activityLogs: 5,
+        businesses: 1,
+        referralChainLength: 1,
+      });
+
+      // Store timestamp and pick a random interval between 2 and 6 minutes
+      const nextIntervalMs = (2 + Math.random() * 4) * 60 * 1000;
+      await metaRef.set({lastRunTime: now, nextIntervalMs});
+
+      logger.info("Scheduled mock data generation complete", {
+        ...result,
+        nextRunInMinutes: Math.round(nextIntervalMs / 60000 * 10) / 10,
+      });
+    } catch (err) {
+      logger.error("Scheduled mock data generation failed", err);
+    }
+  },
+);
+
+/**
+ * Callable: manually trigger mock data generation with custom config.
+ * Only admins can call this.
+ */
+export const triggerMockDataGeneration = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  const callerDoc = await admin
+    .firestore()
+    .collection("admins")
+    .doc(request.auth.uid)
+    .get();
+
+  if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+    throw new HttpsError(
+      "permission-denied",
+      "Only admins can trigger mock data generation"
+    );
+  }
+
+  try {
+    const config = request.data || {};
+    const result = await generateMockData(config);
+    return {success: true, ...result};
+  } catch (err) {
+    logger.error("Manual mock data generation failed", err);
+    throw new HttpsError("internal", "Failed to generate mock data");
+  }
+});
+
+/**
+ * Callable: delete all mock data from Firestore.
+ * Only admins can call this.
+ */
+export const triggerMockDataCleanup = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  const callerDoc = await admin
+    .firestore()
+    .collection("admins")
+    .doc(request.auth.uid)
+    .get();
+
+  if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+    throw new HttpsError(
+      "permission-denied",
+      "Only admins can cleanup mock data"
+    );
+  }
+
+  try {
+    const result = await cleanupMockData();
+    return {success: true, ...result};
+  } catch (err) {
+    logger.error("Mock data cleanup failed", err);
+    throw new HttpsError("internal", "Failed to cleanup mock data");
   }
 });
 

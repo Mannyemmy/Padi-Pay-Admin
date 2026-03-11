@@ -34,11 +34,12 @@ import {
   Activity,
   Timer,
 } from "lucide-react";
-import { collection, getDocs, query, orderBy, limit } from "firebase/firestore";
+import { collection, getDocs, query, orderBy, limit, where } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import { showToast } from "@/components/Toast";
 import { ExportMenu } from "@/components/ExportMenu";
 import { allRoutes } from "@/lib/routes";
+import { useDemoMode } from "@/lib/demo";
 
 type ActivityType = "page_view" | "api_call" | "login" | "logout";
 type DeviceType = "mobile" | "desktop" | "tablet" | "unknown";
@@ -75,6 +76,7 @@ interface ActivityMetrics {
 }
 
 export default function ActivityLogsPage() {
+  const demoMode = useDemoMode();
   const [activityLogs, setActivityLogs] = useState<ActivityLog[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -131,7 +133,9 @@ export default function ActivityLogsPage() {
       try {
         setLoading(true);
         const logsRef = collection(db, "activityLogs");
-        const q = query(logsRef, orderBy("createdAt", "desc"), limit(1000));
+        const constraints: any[] = [orderBy("createdAt", "desc"), limit(1000)];
+        if (demoMode) constraints.unshift(where("mock", "==", true));
+        const q = query(logsRef, ...constraints);
         const querySnapshot = await getDocs(q);
 
         const logs: ActivityLog[] = [];
@@ -189,7 +193,7 @@ export default function ActivityLogsPage() {
     };
 
     fetchActivityLogs();
-  }, []);
+  }, [demoMode]);
 
   // Calculate metrics
   useEffect(() => {

@@ -9,8 +9,11 @@ import { useAuth } from '@/hooks/useAuth';
 import Loading from '@/components/Loading';
 import { showToast } from '@/components/Toast';
 import { ExportMenu } from '@/components/ExportMenu';
+import { useDemoMode } from '@/lib/demo';
 
 export default function AgentsPage() {
+  const demoMode = useDemoMode();
+  const mockOpts = demoMode ? { mock: true } : undefined;
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
@@ -38,14 +41,14 @@ export default function AgentsPage() {
   const computeAgentStats = async (agentList: User[]) => {
     const entries = await Promise.all(agentList.map(async (a) => {
       try {
-        const refs = await getReferralsByReferrer(a.id);
+        const refs = await getReferralsByReferrer(a.id, mockOpts);
         const referralCount = refs.length;
         let transactingCustomers = 0;
         let referralVolume = 0;
 
         await Promise.all(refs.map(async (r) => {
           try {
-            const stats = await getTransactionStatsByUser(r.referredUid);
+            const stats = await getTransactionStatsByUser(r.referredUid, mockOpts);
             if (stats.count > 0) transactingCustomers += 1;
             referralVolume += stats.total;
           } catch {
@@ -72,7 +75,7 @@ export default function AgentsPage() {
   const loadUsers = async () => {
     try {
       setLoading(true);
-      const data = await getUsers();
+      const data = await getUsers(mockOpts);
       setUsers(data);
     } catch (err) {
       console.error('Failed to load users:', err);
@@ -123,7 +126,7 @@ export default function AgentsPage() {
     try {
       setShowReferralsFor(user);
       setLoadingReferrals(true);
-      const data = await getReferralsByReferrer(user.id);
+      const data = await getReferralsByReferrer(user.id, mockOpts);
       setReferrals(data);
 
       // Fetch transaction totals for each referred user
@@ -131,7 +134,7 @@ export default function AgentsPage() {
       await Promise.all(
         data.map(async (r) => {
           try {
-            const stats = await getTransactionStatsByUser(r.referredUid);
+            const stats = await getTransactionStatsByUser(r.referredUid, mockOpts);
             totalsMap[r.referredUid] = stats;
           } catch (err) {
             console.error('Failed to load txn stats for', r.referredUid, err);

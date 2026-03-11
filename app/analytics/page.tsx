@@ -62,6 +62,7 @@ import {
   Timestamp,
 } from "firebase/firestore";
 import { db } from "@/lib/firebase"; // Adjust the import path as needed
+import { useDemoMode } from "@/lib/demo";
 
 // Types
 interface UserData {
@@ -297,6 +298,7 @@ function Dialog({
 }
 
 const AnalyticsDashboard: React.FC = () => {
+  const demoMode = useDemoMode();
   const [data, setData] = useState<AnalyticsData>({
     summary: {
       totalUsers: 0,
@@ -444,14 +446,20 @@ const AnalyticsDashboard: React.FC = () => {
     setLoading(true);
     try {
       // Fetch all users
-      const usersSnapshot = await getDocs(collection(db, "users"));
+      const usersConstraints: any[] = [];
+      if (demoMode) usersConstraints.push(where("mock", "==", true));
+      const usersQuery = usersConstraints.length
+        ? query(collection(db, "users"), ...usersConstraints)
+        : collection(db, "users");
+      const usersSnapshot = await getDocs(usersQuery);
       const users: UserData[] = usersSnapshot.docs.map(
         (doc) =>
           ({
             id: doc.id,
             ...doc.data(),
           }) as UserData,
-      );
+      )
+        .filter((u) => (demoMode ? true : !(u as any).mock));
 
       // Calculate summary data
       const today = new Date();
@@ -459,10 +467,14 @@ const AnalyticsDashboard: React.FC = () => {
       const todayEnd = endOfDay(today);
 
       // Fetch login logs for today
-      const loginLogsQuery = query(
-        collection(db, "loginLogs"),
+      const loginConstraints: any[] = [
         where("timestamp", ">=", Timestamp.fromDate(todayStart)),
         where("timestamp", "<=", Timestamp.fromDate(todayEnd)),
+      ];
+      if (demoMode) loginConstraints.push(where("mock", "==", true));
+      const loginLogsQuery = query(
+        collection(db, "loginLogs"),
+        ...loginConstraints,
       );
 
       const loginLogsSnapshot = await getDocs(loginLogsQuery);
@@ -475,9 +487,12 @@ const AnalyticsDashboard: React.FC = () => {
       );
 
       // Fetch blocked logins
-      const blockedLoginsSnapshot = await getDocs(
-        collection(db, "blockedLogins"),
-      );
+      const blockedConstraints: any[] = [];
+      if (demoMode) blockedConstraints.push(where("mock", "==", true));
+      const blockedQuery = blockedConstraints.length
+        ? query(collection(db, "blockedLogins"), ...blockedConstraints)
+        : collection(db, "blockedLogins");
+      const blockedLoginsSnapshot = await getDocs(blockedQuery);
       const blockedLogins: BlockedLoginData[] = blockedLoginsSnapshot.docs.map(
         (doc) =>
           ({

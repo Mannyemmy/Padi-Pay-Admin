@@ -30,6 +30,7 @@ import { User } from "@/lib/types";
 import { ExportMenu } from "@/components/ExportMenu";
 import { Pagination } from "@/components/Pagination";
 import { EmptyState } from "@/components/EmptyState";
+import { useDemoMode } from "@/lib/demo";
 
 interface ReferralStats {
   totalReferrals: number;
@@ -45,6 +46,7 @@ interface ReferralUser extends User {
 }
 
 export default function ReferralsAdminPage() {
+  const demoMode = useDemoMode();
   const [users, setUsers] = useState<ReferralUser[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
@@ -98,8 +100,10 @@ export default function ReferralsAdminPage() {
       try {
         setLoading(true);
 
+        const usersConstraints: any[] = [orderBy("createdAt", "desc")];
+        if (demoMode) usersConstraints.unshift(where("mock", "==", true));
         const usersSnapshot = await getDocs(
-          query(collection(db, "users"), orderBy("createdAt", "desc")),
+          query(collection(db, "users"), ...usersConstraints),
         );
         const usersData: ReferralUser[] = [];
 
@@ -154,7 +158,7 @@ export default function ReferralsAdminPage() {
     };
 
     fetchReferralData();
-  }, [referralBonus]);
+  }, [referralBonus, demoMode]);
 
   // Save referral settings to Firestore
   const updateReferralBonus = async () => {

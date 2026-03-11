@@ -38,6 +38,7 @@ import { ConfirmModal } from "@/components/ConfirmModal";
 import { ExportMenu } from "@/components/ExportMenu";
 import { httpsCallable } from "firebase/functions";
 import { functions } from "@/lib/firebase";
+import { useDemoMode } from "@/lib/demo";
 
 // Add fetchAccountBalance function
 const fetchAccountBalance = httpsCallable<
@@ -151,6 +152,8 @@ const getAccountId = (entity: User | Business): string | null => {
 };
 
 export default function UsersPage() {
+  const demoMode = useDemoMode();
+  const mockOpts = demoMode ? { mock: true } : undefined;
   const [activeTab, setActiveTab] = useState<TabType>("users");
   const [users, setUsers] = useState<User[]>([]);
   const [businesses, setBusinesses] = useState<Business[]>([]);
@@ -473,8 +476,8 @@ export default function UsersPage() {
       try {
         setLoading(true);
         const [usersData, businessesData] = await Promise.all([
-          getUsers(),
-          getBusinesses(),
+          getUsers(mockOpts),
+          getBusinesses(mockOpts),
         ]);
 
         console.log("Raw users data:", usersData);
