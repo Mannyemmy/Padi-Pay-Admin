@@ -29,9 +29,11 @@ export async function middleware(request: NextRequest) {
     const admin = await getCurrentAdmin();
     
     if (!admin) {
-      // No admin, redirect to login
+      // No admin, redirect to login preserving the intended destination
       if (pathname !== '/login') {
-        return NextResponse.redirect(new URL('/login', request.url));
+        const loginUrl = new URL('/login', request.url);
+        loginUrl.searchParams.set('from', pathname);
+        return NextResponse.redirect(loginUrl);
       }
       return NextResponse.next();
     }

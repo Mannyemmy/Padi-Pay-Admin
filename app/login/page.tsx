@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { signInAdmin, triggerPasswordReset } from '@/lib/auth';
 import { activityLogger } from '@/lib/services/activityLogger';
 import { doc, getDoc } from 'firebase/firestore';
@@ -10,6 +10,9 @@ import { Mail, Lock, LogIn } from 'lucide-react';
 
 export default function LoginPage() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const fromPath = searchParams.get('from');
+  const redirectTo = fromPath?.startsWith('/admin/v2') ? fromPath : '/';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -86,9 +89,9 @@ export default function LoginPage() {
           );
         }
         
-        // Redirect to dashboard
+        // Redirect to intended destination (or dashboard)
         router.refresh();
-        router.replace('/');
+        router.replace(redirectTo);
       } else {
         throw new Error('Login failed - no user returned');
       }
