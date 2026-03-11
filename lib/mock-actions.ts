@@ -16,3 +16,10 @@ export async function triggerCleanup() {
   const result = await fn({});
   return result.data as { success: boolean; deleted: Record<string, number> };
 }
+
+/** Seed the company/account_details doc with a 9Payment Service Bank account */
+export async function seedCompanyAccount() {
+  const fn = httpsCallable(functions, 'seedCompanyAccount');
+  const result = await fn({});
+  return result.data as { success: boolean; accountNumber: string; availableBalance: number };
+}

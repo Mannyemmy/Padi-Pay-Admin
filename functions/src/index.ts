@@ -487,3 +487,42 @@ export const triggerMockDataCleanup = onCall(async (request) => {
   }
 });
 
+/**
+ * Write (or overwrite) the company/account_details doc with a 9Payment Service Bank account.
+ * Balance is a random mock value stored directly; no Anchor API call needed.
+ */
+export const seedCompanyAccount = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+  const callerDoc = await admin
+    .firestore()
+    .collection("admins")
+    .doc(request.auth.uid)
+    .get();
+  if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "Only admins can seed company account");
+  }
+
+  const randInt = (min: number, max: number) =>
+    Math.floor(Math.random() * (max - min + 1)) + min;
+  const accountNumber = Array.from({length: 10}, () => randInt(0, 9)).join("");
+  // Balance is stored in kobo (×100) to match Anchor API convention
+  const availableBalance = randInt(500000, 5000000) * 100;
+
+  await admin.firestore().collection("company").doc("account_details").set({
+    accountNumber,
+    bankName: "9 Payment Service Bank",
+    bankNipCode: "120001",
+    // No real Anchor accountId — balance served from this doc directly
+    availableBalance,
+    ledgerBalance: availableBalance,
+    hold: 0,
+    pending: 0,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+  }, {merge: true});
+
+  logger.info("Company account seeded", {accountNumber, availableBalance});
+  return {success: true, accountNumber, availableBalance};
+});
+

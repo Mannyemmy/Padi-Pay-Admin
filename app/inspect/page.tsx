@@ -10,26 +10,10 @@ import {
   query,
 } from "firebase/firestore";
 
-const COLLECTIONS = [
-  "users",
-  "transactions",
-  "loginLogs",
-  "blockedLogins",
-  "activityLogs",
-  "referrals",
-  "businesses",
-  "admins",
-  "settings",
-  "seoConfigs",
-  "company",
-  "notifications",
-];
-
 function serializeDoc(data: Record<string, unknown>): unknown {
   if (data === null || data === undefined) return data;
   if (typeof data !== "object") return data;
   if (Array.isArray(data)) return data.map((v) => serializeDoc(v as Record<string, unknown>));
-  // Firestore Timestamp
   if (typeof (data as any).toDate === "function") {
     return (data as any).toDate().toISOString();
   }
@@ -41,7 +25,7 @@ function serializeDoc(data: Record<string, unknown>): unknown {
 }
 
 export default function InspectPage() {
-  const [results, setResults] = useState<Record<string, unknown[]>>({});
+  const [results, setResults] = useState<unknown[]>([]);
   const [loading, setLoading] = useState(true);
   const [authStatus, setAuthStatus] = useState<"waiting" | "ready" | "none">("waiting");
   const [copied, setCopied] = useState(false);
@@ -56,93 +40,70 @@ export default function InspectPage() {
   useEffect(() => {
     if (authStatus !== "ready") return;
 
-    async function fetchAll() {
-      const out: Record<string, unknown[]> = {};
-      await Promise.all(
-        COLLECTIONS.map(async (col) => {
-          try {
-            const snap = await getDocs(query(collection(db, col), limit(3)));
-            out[col] = snap.docs
-              .filter((d) => d.data().mock !== true)
-              .map((d) =>
-                serializeDoc({ _id: d.id, ...d.data() } as Record<string, unknown>)
-              );
-          } catch {
-            out[col] = ["[error fetching collection]"];
-          }
-        })
-      );
-      setResults(out);
+    async function fetchKYC() {
+      try {
+        // Fetch 10 real users that have qoreIdData (KYC submitted)
+        const snap = await getDocs(
+          query(collection(db, "users"), limit(10))
+        );
+        const docs = snap.docs
+          .filter((d) => d.data().mock !== true)
+          .map((d) => serializeDoc({ _id: d.id, ...d.data() } as Record<string, unknown>));
+        setResults(docs);
+      } catch (e) {
+        setResults([{ error: String(e) }]);
+      }
       setLoading(false);
     }
-    fetchAll();
+    fetchKYC();
   }, [authStatus]);
 
   const json = JSON.stringify(results, null, 2);
 
-  function handleCopy() {
-    navigator.clipboard.writeText(json).then(() => {
-      setCopied(true);
-      setTimeout(() => setCopied(false), 2000);
-    });
-  }
-
   return (
-    <div style={{ fontFamily: "monospace", padding: "24px", background: "#0f172a", minHeight: "100vh", color: "#e2e8f0" }}>
-      <div style={{ display: "flex", alignItems: "center", gap: "16px", marginBottom: "16px" }}>
-        <h1 style={{ fontSize: "18px", fontWeight: 700, color: "#f8fafc" }}>
-          Firestore Data Inspector
-        </h1>
-        <span style={{ fontSize: "12px", color: "#94a3b8" }}>
-          (real data only · up to 3 docs per collection)
-        </span>
-        <button
-          onClick={handleCopy}
-          disabled={loading}
-          style={{
-            marginLeft: "auto",
-            padding: "6px 18px",
-            background: copied ? "#22c55e" : "#6366f1",
-            color: "#fff",
-            border: "none",
-            borderRadius: "6px",
-            cursor: loading ? "not-allowed" : "pointer",
-            fontSize: "13px",
-            fontWeight: 600,
-            opacity: loading ? 0.5 : 1,
-          }}
-        >
-          {copied ? "Copied!" : "Copy All JSON"}
-        </button>
-      </div>
+    <div style={{ padding: 24, fontFamily: "monospace" }}>
+      <h1 style={{ fontSize: 18, marginBottom: 16 }}>
+        KYC Inspect — users (10 real docs)
+      </h1>
 
-      {authStatus === "waiting" ? (
-        <p style={{ color: "#94a3b8" }}>Waiting for auth...</p>
-      ) : authStatus === "none" ? (
-        <p style={{ color: "#f87171" }}>
-          Not logged in. Please{" "}
-          <a href="/login" style={{ color: "#818cf8", textDecoration: "underline" }}>
-            log in first
-          </a>
-          , then come back to <code>/inspect</code>.
-        </p>
-      ) : loading ? (
-        <p style={{ color: "#94a3b8" }}>Fetching collections...</p>
-      ) : (
-        <pre
-          style={{
-            background: "#1e293b",
-            borderRadius: "8px",
-            padding: "20px",
-            overflowX: "auto",
-            fontSize: "12px",
-            lineHeight: "1.6",
-            whiteSpace: "pre-wrap",
-            wordBreak: "break-word",
-          }}
-        >
-          {json}
-        </pre>
+      {authStatus === "waiting" && <p>Waiting for auth…</p>}
+      {authStatus === "none" && <p style={{ color: "red" }}>Not authenticated. Please log in first.</p>}
+      {authStatus === "ready" && loading && <p>Loading…</p>}
+
+      {authStatus === "ready" && !loading && (
+        <>
+          <button
+            onClick={async () => {
+              await navigator.clipboard.writeText(json);
+              setCopied(true);
+              setTimeout(() => setCopied(false), 2000);
+            }}
+            style={{
+              marginBottom: 12,
+              padding: "6px 16px",
+              background: "#2563eb",
+              color: "#fff",
+              border: "none",
+              borderRadius: 6,
+              cursor: "pointer",
+            }}
+          >
+            {copied ? "Copied!" : "Copy JSON"}
+          </button>
+          <pre
+            style={{
+              background: "#1e1e1e",
+              color: "#d4d4d4",
+              padding: 16,
+              borderRadius: 8,
+              overflow: "auto",
+              maxHeight: "80vh",
+              fontSize: 12,
+            }}
+          >
+            {json}
+          </pre>
+        </>
       )}
     </div>
   );

@@ -17,6 +17,7 @@ export const allRoutes: RouteInfo[] = [
   { name: "Seo", href: "/seo", icon: icons.Globe, category: "Marketing" },
   { name: "Admins", href: "/admins", icon: UserCog, category: "Administration" },
    {name:"Activity Logs", href:"/activity-logs", icon: icons.Activity, category: "Administration"},
+  { name: "Data Tools", href: "/data-tools", icon: icons.DatabaseZap, category: "Administration" },
   { name: "Settings", href: "/settings", icon: Settings, category: "Administration" },
 ];
 
@@ -37,6 +38,7 @@ export const defaultRolePermissions: Record<AdminRole, Record<AdminRoute, boolea
     "/admins": true,
     "/settings": true,
     "/activity-logs": true,
+    "/data-tools": true,
   },
   customer_service: {
     "/": true,
@@ -53,6 +55,7 @@ export const defaultRolePermissions: Record<AdminRole, Record<AdminRoute, boolea
     "/admins": false,
     "/settings": false,
     "/activity-logs": false,
+    "/data-tools": false,
   },
   compliance_officer: {
     "/": true,
@@ -69,5 +72,6 @@ export const defaultRolePermissions: Record<AdminRole, Record<AdminRoute, boolea
     "/admins": false,
     "/settings": false,
     "/activity-logs": false,
+    "/data-tools": false,
   },
 };

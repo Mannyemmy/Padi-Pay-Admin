@@ -46,6 +46,10 @@ const fetchAccountBalance = httpsCallable<
   { data: { availableBalance: number; currency: string } }
 >(functions, "fetchAccountBalance");
 
+/** Return a random realistic NGN balance for mock entities (avoids hitting real Anchor API) */
+const mockBalance = (): number =>
+  Math.floor(Math.random() * 490000 + 10000);
+
 type TabType = "users" | "businesses";
 
 const getCurrencySymbol = (currency?: string): string => {
@@ -237,6 +241,21 @@ export default function UsersPage() {
 
     if (!entity) return;
 
+    // Mock entities: return a random balance only if they have a virtual account (KYC approved)
+    if ((entity as any).mock) {
+      const accountId = getAccountId(entity);
+      if (!accountId) return; // No account = no balance (KYC not approved)
+      const balance = mockBalance();
+      if (isBusiness) {
+        setBusinessBalances((prev) => ({ ...prev, [entityId]: { availableBalance: balance, currency: "NGN", loading: false } }));
+        if (selectedBusiness?.id === entityId) setSelectedBusinessBalance({ availableBalance: balance, currency: "NGN", loading: false });
+      } else {
+        setUserBalances((prev) => ({ ...prev, [entityId]: { availableBalance: balance, currency: "NGN", loading: false } }));
+        if (selectedUser?.id === entityId) setSelectedUserBalance({ availableBalance: balance, currency: "NGN", loading: false });
+      }
+      return;
+    }
+
     const accountId = getAccountId(entity);
     if (!accountId) {
       showToast(
@@ -394,6 +413,13 @@ export default function UsersPage() {
       // Fetch balances for all users and businesses
       const fetchPromises = [
         ...users.map(async (user) => {
+          if ((user as any).mock) {
+            setUserBalances((prev) => ({
+              ...prev,
+              [user.id]: { availableBalance: mockBalance(), currency: "NGN", loading: false },
+            }));
+            return;
+          }
           const accountId = getAccountId(user);
           if (accountId) {
             try {
@@ -428,6 +454,13 @@ export default function UsersPage() {
           }
         }),
         ...businesses.map(async (business) => {
+          if ((business as any).mock) {
+            setBusinessBalances((prev) => ({
+              ...prev,
+              [business.id]: { availableBalance: mockBalance(), currency: "NGN", loading: false },
+            }));
+            return;
+          }
           const accountId = getAccountId(business);
           if (accountId) {
             try {

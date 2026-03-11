@@ -46,7 +46,11 @@ export async function getUsers(options?: MockFilterOptions) {
           : data.createdAt,
       } as User;
     })
-    .filter((u) => (options?.mock ? true : !(u as any).mock));
+    .filter((u) => {
+      if (options?.mock) return true;
+      if ((u as any).mock) return false;
+      return true;
+    });
 }
 
 export async function getUser(userId: string) {
@@ -102,7 +106,13 @@ export async function getTransactions(options?: MockFilterOptions) {
         date,
       } as Transaction;
     })
-    .filter((t) => (options?.mock ? true : !(t as any).mock));
+    .filter((t) => {
+      if (options?.mock) return true;
+      if ((t as any).mock) return false;
+      const uid = (t as any).userId;
+      if (typeof uid === 'string' && uid.startsWith('mock_')) return false;
+      return true;
+    });
 
   return items.sort((a, b) => {
     const ad = a.date ? new Date(a.date).getTime() : 0;
@@ -368,7 +378,11 @@ export async function getBusinesses(options?: MockFilterOptions) {
       id: doc.id,
       ...doc.data(),
     }))
-    .filter((b) => (options?.mock ? true : !(b as any).mock)) as Business[];
+    .filter((b) => {
+      if (options?.mock) return true;
+      if ((b as any).mock) return false;
+      return true;
+    }) as Business[];
 }
 
 export async function getBusiness(businessId: string) {

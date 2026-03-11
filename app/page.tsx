@@ -55,6 +55,10 @@ const getAccountId = (entity: User | Business): string | null => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   return (entity.getAnchorData as any)?.virtualAccount?.data?.id || null;
 };
+
+/** Return a random realistic NGN balance for mock entities (avoids hitting real Anchor API) */
+const mockBalance = (): number =>
+  Math.floor(Math.random() * 490000 + 10000);
 async function fetchAccountBalanceHttp(
   accountId: string,
 ): Promise<AccountBalanceResp> {
@@ -161,88 +165,17 @@ export default function DashboardPage() {
   const [companyLoading, setCompanyLoading] = useState<boolean>(false);
   const [companyError, setCompanyError] = useState<string | null>(null);
   const [copiedAccount, setCopiedAccount] = useState<boolean>(false);
-  // Add new state for total assets
-  const [totalAssets, setTotalAssets] = useState<number>(0);
-  const [assetsLoading, setAssetsLoading] = useState<boolean>(true);
+  const [businesses, setBusinesses] = useState<Business[]>([]);
 
-  // Add this function to calculate total assets
-  const calculateTotalAssets = async () => {
-    try {
-      setAssetsLoading(true);
-      let total = 0;
-
-      // Get all users and businesses
-      const [allUsers, allBusinesses] = await Promise.all([
-        getUsers(),
-        getBusinesses(),
-      ]);
-
-      // Function to fetch balance for a single entity
-      const fetchEntityBalance = async (
-        entity: User | Business,
-      ): Promise<number> => {
-        const accountId = getAccountId(entity);
-        if (!accountId) return 0;
-
-        try {
-          const result = await fetchAccountBalance({ accountId });
-          const balanceData = result.data.data as {
-            availableBalance: number;
-            currency?: string;
-          };
-
-          // Convert from kobo to naira (divide by 100)
-          return balanceData.availableBalance / 100;
-        } catch (error) {
-          console.error(
-            `Error fetching balance for entity ${entity.id}:`,
-            error,
-          );
-          return 0;
-        }
-      };
-
-      // Fetch balances for all users and businesses in parallel
-      const userBalances = await Promise.allSettled(
-        allUsers.map((user) => fetchEntityBalance(user)),
-      );
-
-      const businessBalances = await Promise.allSettled(
-        allBusinesses.map((business) => fetchEntityBalance(business)),
-      );
-
-      // Sum up all successful balances
-      userBalances.forEach((result) => {
-        if (result.status === "fulfilled") {
-          total += result.value;
-        }
-      });
-
-      businessBalances.forEach((result) => {
-        if (result.status === "fulfilled") {
-          total += result.value;
-        }
-      });
-
-      setTotalAssets(total);
-    } catch (error) {
-      console.error("Error calculating total assets:", error);
-      setTotalAssets(0);
-    } finally {
-      setAssetsLoading(false);
-    }
-  };
   useEffect(() => {
     const load = async () => {
       try {
         setLoading(true);
-        const [txns, usersData] = await Promise.all([
+        const [txns, usersData, bizData] = await Promise.all([
           getTransactions(mockOpts),
           getUsers(mockOpts),
+          getBusinesses(mockOpts),
         ]);
-
-        // Calculate total assets in parallel with other data processing
-        if (!demoMode) calculateTotalAssets();
 
         const userMap = new Map(usersData.map((u) => [u.id, u]));
         const normalized = txns.map((t) => {
@@ -297,9 +230,9 @@ export default function DashboardPage() {
 
         setTransactions(normalized);
         setUsers(usersData);
+        setBusinesses(bizData);
 
-        // Fetch company account details and balance (skip in demo mode)
-        if (!demoMode) {
+        // Fetch company account details and balance
         try {
           const accountRef = doc(db, "company", "account_details");
           const accountSnap = await getDoc(accountRef);
@@ -325,16 +258,11 @@ export default function DashboardPage() {
 
             setCompanyTransfer({ accountNumber, bankName });
 
-            if (accountId) {
+            if (accountId && !demoMode) {
               setCompanyLoading(true);
               setCompanyError(null);
               try {
                 const resp = await fetchAccountBalanceHttp(String(accountId));
-                console.log(
-                  "fetchAccountBalanceHttp response for accountId",
-                  accountId,
-                  resp,
-                );
                 const d = resp?.data;
                 if (d) {
                   setCompanyBalance({
@@ -347,17 +275,20 @@ export default function DashboardPage() {
                   setCompanyError("No balance data");
                 }
               } catch (err) {
-                console.error(
-                  "Failed to fetch account balance (HTTP) for accountId",
-                  accountId,
-                  err,
-                );
+                console.error("Failed to fetch account balance (HTTP)", err);
                 setCompanyError("Error fetching balance");
               } finally {
                 setCompanyLoading(false);
               }
+            } else if (acctData?.availableBalance != null) {
+              // Balance stored directly in the doc (seeded mock account)
+              setCompanyBalance({
+                availableBalance: Number(acctData.availableBalance),
+                ledgerBalance: Number(acctData.ledgerBalance || acctData.availableBalance),
+                hold: Number(acctData.hold || 0),
+                pending: Number(acctData.pending || 0),
+              });
             } else {
-              console.warn("No accountId found in company/account_details");
               setCompanyError("Missing accountId");
             }
           } else {
@@ -368,7 +299,6 @@ export default function DashboardPage() {
           console.error("Failed to load company account details", err);
           setCompanyError("Failed to load account details");
         }
-        } // end if (!demoMode)
 
         setError(null);
       } catch (err) {
@@ -427,16 +357,15 @@ export default function DashboardPage() {
       .reduce((sum, t) => sum + (Number(t.amount) || 0), 0);
 
     return {
-      totalAssets, // Add total assets here
       balance: deposits - withdrawals,
       deposits,
       withdrawals,
       transfers,
       pendingWithdrawals,
-      users: users.length,
+      users: users.length + businesses.length,
       transactions: filteredByPeriod.length,
     };
-  }, [filteredByPeriod, users.length, totalAssets]);
+  }, [filteredByPeriod, users.length, businesses.length]);
 
   const weeklyData = useMemo(() => {
     const now = new Date();
@@ -521,7 +450,7 @@ export default function DashboardPage() {
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
           <StatsCard
             title="Total Assets (₦)"
-            value={assetsLoading ? "..." : totalAssets.toLocaleString()}
+            value={loading ? "..." : `₦${stats.balance.toLocaleString()}`}
             icon={<Wallet className="w-6 h-6" />}
             trend={{ value: 12.5, isPositive: true }}
           />

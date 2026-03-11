@@ -483,7 +483,7 @@ export default function CompliancePage() {
               renderPrint={(data) => {
                 const rows = data.map((r: any) => `
                   <tr>
-                    <td>${r.id}</td>
+                    <td>${r.id.startsWith('mock_') ? '—' : r.id}</td>
                     <td>${r.name}</td>
                     <td>${r.email}</td>
                     <td>${r.phone}</td>
@@ -744,7 +744,7 @@ export default function CompliancePage() {
                             {user.email}
                           </div>
                           <div className="text-xs text-gray-400 mt-1">
-                            ID: {user.id}
+                            {!user.id.startsWith('mock_') && `ID: ${user.id}`}
                           </div>
                         </div>
                       </div>
@@ -926,7 +926,7 @@ export default function CompliancePage() {
                     KYC Verification Details
                   </h2>
                   <p className="text-sm text-gray-500 mt-1">
-                    {selectedUser.userType === 'individual' ? 'User' : 'Business'} ID: {selectedUser.id}
+                    {selectedUser.userType === 'individual' ? 'User' : 'Business'}{!selectedUser.id.startsWith('mock_') && ` ID: ${selectedUser.id}`}
                   </p>
                 </div>
                 <button

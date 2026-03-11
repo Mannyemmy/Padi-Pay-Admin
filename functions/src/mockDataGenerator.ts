@@ -128,13 +128,23 @@ const randEmail = (first: string, last: string) => {
   return `${first.toLowerCase()}${last.toLowerCase()}${randInt(1, 999)}@${pick(domains)}`;
 };
 
-const recentISO = (maxHoursAgo: number): string => {
-  const ms = Date.now() - randInt(0, maxHoursAgo * 60 * 60 * 1000);
+const recentMs = (maxHoursAgo: number): number =>
+  Date.now() - randInt(0, maxHoursAgo * 60 * 60 * 1000);
+
+// Anchored date ranges
+const USER_START_MS = new Date("2026-01-20T00:00:00Z").getTime();
+const TXN_START_MS = new Date("2026-02-05T00:00:00Z").getTime();
+
+const sinceISO = (startMs: number): string => {
+  const ms = startMs + randInt(0, Math.max(1, Date.now() - startMs));
   return new Date(ms).toISOString();
 };
 
-const recentMs = (maxHoursAgo: number): number =>
-  Date.now() - randInt(0, maxHoursAgo * 60 * 60 * 1000);
+const sinceMs = (startMs: number): number =>
+  startMs + randInt(0, Math.max(1, Date.now() - startMs));
+
+/** Round to nearest 500 for natural-looking amounts */
+const roundAmount = (n: number): number => Math.round(n / 500) * 500 || 500;
 
 function randomIP(): string {
   return `${pick(["41", "102", "105", "154", "197"])}.${randInt(1, 254)}.${randInt(1, 254)}.${randInt(1, 254)}`;
@@ -155,11 +165,11 @@ function generateUser(): { id: string; data: Record<string, any> } {
   const id = uuid();
   const hasKYC = Math.random() > 0.4;
   const isAgent = Math.random() > 0.85;
-  const bank = pick(ANCHOR_BANKS);
+  const bank = ANCHOR_BANKS.find((b) => b.nipCode === "120001")!; // 9 Payment Service Bank
   const accountNumber = randAccountNumber();
   const anchorCustomerId = `${ancId()}anc_ind_cst`;
   const anchorAccountId = `${ancId()}anc_acc`;
-  const createdAtISO = recentISO(90 * 24);
+  const createdAtISO = sinceISO(USER_START_MS);
 
   const data: Record<string, any> = {
     mock: true,
@@ -174,10 +184,12 @@ function generateUser(): { id: string; data: Record<string, any> } {
     state: state.toLowerCase(),
     country: "Nigeria",
     postalCode: String(randInt(100000, 999999)),
+    createdAt: admin.firestore.Timestamp.fromMillis(sinceMs(USER_START_MS)),
   };
 
   if (hasKYC) {
-    data.kycStatus = pick(["APPROVED", "APPROVED", "PENDING"]);
+    const kycStatus = pick(["APPROVED", "APPROVED", "PENDING"]);
+    data.kycStatus = kycStatus;
     data.bvn = randBVN();
     data.dateOfBirth = dob;
     data.address = {
@@ -187,6 +199,120 @@ function generateUser(): { id: string; data: Record<string, any> } {
       postalCode: String(randInt(100000, 999999)),
       country: "NG",
     };
+
+    // Generate qoreIdData matching real Firestore structure
+    // 80% verified, 10% failed_face, 10% failed_liveness
+    const qoreScenario = pick(["verified", "verified", "verified", "verified", "verified", "verified", "verified", "verified", "failed_face", "failed_liveness"]);
+    const qoreId = String(randInt(100000000, 199999999));
+    const bvnNumber = randBVN();
+    const qoreImageUrl = `https://media.qoreid.com/v1/file/mock_${uuid()}`;
+    const externalRef = `production-${randInt(1000000, 9999999)}`;
+
+    let qoreMetadata: Record<string, any>;
+    let qoreSummary: Record<string, any>;
+
+    if (qoreScenario === "verified") {
+      const similarity = 97 + Math.random() * 3; // 97-100%
+      qoreMetadata = {
+        type: "bvn",
+        match: true,
+        isLive: true,
+        percentageSimilarity: similarity,
+        matchingThreshold: 97,
+        maxScore: 100,
+        message: "Liveness Detected",
+        idNumber: bvnNumber,
+        imageUrl: qoreImageUrl,
+        externalDatabaseRefID: externalRef,
+      };
+      qoreSummary = {
+        liveness_check: {
+          match: true, isLive: true, percentageSimilarity: similarity,
+          matchingThreshold: 97, maxScore: 100, message: "Liveness Detected",
+          externalDatabaseRefID: externalRef,
+        },
+        bvn_check: {
+          status: "EXACT_MATCH",
+          fieldMatches: { firstname: true, lastname: true, phoneNumber: true, emailAddress: false },
+        },
+      };
+    } else if (qoreScenario === "failed_face") {
+      // Liveness ok but face didn't match
+      qoreMetadata = {
+        type: "bvn",
+        match: false,
+        isLive: true,
+        percentageSimilarity: 0,
+        matchingThreshold: 97,
+        maxScore: 100,
+        message: "Liveness Detected",
+        idNumber: bvnNumber,
+        imageUrl: qoreImageUrl,
+        externalDatabaseRefID: externalRef,
+      };
+      qoreSummary = {
+        liveness_check: {
+          match: false, isLive: true, percentageSimilarity: 0,
+          matchingThreshold: 97, maxScore: 100, message: "Liveness Detected",
+          externalDatabaseRefID: externalRef,
+        },
+        bvn_check: {
+          status: "NO_MATCH",
+          fieldMatches: { firstname: true, lastname: false, phoneNumber: false, emailAddress: false },
+        },
+      };
+    } else if (qoreScenario === "failed_liveness") {
+      // No liveness detected at all
+      qoreMetadata = {
+        type: "bvn",
+        match: false,
+        isLive: false,
+        percentageSimilarity: 0,
+        matchingThreshold: 99.999,
+        maxScore: 100,
+        message: "No Liveness Detected",
+        idNumber: bvnNumber,
+        imageUrl: qoreImageUrl,
+        externalDatabaseRefID: null,
+      };
+      qoreSummary = {
+        liveness_check: {
+          match: false, isLive: false, percentageSimilarity: 0,
+          matchingThreshold: 99.999, maxScore: 100, message: "No Liveness Detected",
+          externalDatabaseRefID: null,
+        },
+        bvn_check: {
+          status: "EXACT_MATCH",
+          fieldMatches: { firstname: true, lastname: true, phoneNumber: true, emailAddress: false },
+        },
+      };
+    } else {
+      // pending_only: submitted but no metadata returned yet
+      qoreMetadata = undefined as any;
+      qoreSummary = undefined as any;
+    }
+
+    const qoreVerification: Record<string, any> = {
+      id: qoreId,
+      productCode: "liveness_bvn",
+      submitted: true,
+      verified: false,
+      state: "complete",
+      approved: "pending",
+      applicant: {
+        firstname: firstName,
+        lastname: lastName,
+        email,
+        phone,
+        phoneCountryCode: "NG",
+      },
+    };
+    if (qoreMetadata) qoreVerification.metadata = qoreMetadata;
+    if (qoreSummary) qoreVerification.summary = qoreSummary;
+
+    data.qoreIdData = { verification: qoreVerification };
+
+    if (kycStatus === "APPROVED") {
     data.getAnchorData = {
       tier: pick([1, 2, 3]),
       virtualAccount: {
@@ -217,7 +343,7 @@ function generateUser(): { id: string; data: Record<string, any> } {
             },
             createdAt: createdAtISO,
             currency: "NGN",
-            accountNumber: `******${accountNumber.slice(-4)}`,
+              accountNumber,
             status: "ACTIVE",
             frozen: false,
             accountName: `${lastName} ${firstName}`,
@@ -281,6 +407,7 @@ function generateUser(): { id: string; data: Record<string, any> } {
         },
       },
     };
+    } // end kycStatus === "APPROVED"
   } else {
     data.kycStatus = "NOT_SUBMITTED";
   }
@@ -304,11 +431,11 @@ function generateTransaction(
   ]);
   const status = pick(["success", "success", "success", "failed", "pending"]);
   const amount = type === "deposit"
-    ? randInt(1000, 50000)
+    ? roundAmount(randInt(2000, 50000))
     : type === "transfer" || type === "withdrawal"
-      ? randInt(200, 30000)
-      : randInt(50, 5000);
-  const timestamp = recentISO(30 * 24);
+      ? roundAmount(randInt(500, 30000))
+      : roundAmount(randInt(500, 5000));
+  const timestamp = sinceISO(TXN_START_MS);
   const reference = `${Date.now()}${randInt(1000, 9999)}-anc_trsf`;
   const bank = pick(TRANSFER_BANKS);
   const bankCode = `${ancId()}anc_bk`;
@@ -422,7 +549,7 @@ function generateLoginLog(email: string): { id: string; data: Record<string, any
       errorMessage: success ? null : isBlocked ? pick(BLOCK_ERRORS) : pick(LOGIN_ERRORS),
       ip,
       networkType,
-      timestamp: recentISO(14 * 24),
+      timestamp: admin.firestore.Timestamp.fromMillis(Date.now() - randInt(0, 14 * 24 * 60 * 60 * 1000)),
       userAgent: "Flutter App",
       deviceInfo: {
         device: deviceProfile.device,
@@ -455,7 +582,7 @@ function generateBlockedLogin(email: string): { id: string; data: Record<string,
       errorMessage: pick(BLOCK_ERRORS),
       ip,
       networkType: "[ConnectivityResult.mobile]",
-      timestamp: recentISO(7 * 24),
+      timestamp: admin.firestore.Timestamp.fromMillis(Date.now() - randInt(0, 7 * 24 * 60 * 60 * 1000)),
       userAgent: "Flutter App",
       deviceInfo: {
         device: pick(TECNO_DEVICES),
@@ -517,7 +644,7 @@ function generateReferral(
       referrerName,
       referredUid,
       referredName,
-      createdAt: admin.firestore.Timestamp.fromMillis(recentMs(60 * 24)),
+      createdAt: admin.firestore.Timestamp.fromMillis(sinceMs(USER_START_MS)),
     },
   };
 }
@@ -535,63 +662,66 @@ function generateBusiness(
   ];
   const state = pick(NIGERIAN_STATES);
   const city = pick(CITIES[state] || ["Central"]);
-  const bank = pick(ANCHOR_BANKS);
+  const bank = ANCHOR_BANKS.find((b) => b.nipCode === "120001")!; // 9 Payment Service Bank
   const accountNumber = randAccountNumber();
   const anchorAccountId = `${ancId()}anc_acc`;
   const anchorCustomerId = `${ancId()}anc_ind_cst`;
-  const createdAtISO = recentISO(90 * 24);
+  const createdAtISO = sinceISO(USER_START_MS);
 
-  return {
-    id: uuid(),
-    data: {
-      mock: true,
-      ownerId,
-      ownerName,
-      business_data: {
-        name: pick(bizNames),
-        desc: "A growing business powered by PadiPay",
-        bizAddress: `${randInt(1, 100)} ${pick(STREETS)}, ${city}`,
-        industry: pick(["Retail", "Agriculture", "Technology", "Logistics", "Food & Beverage"]),
-        regType: pick(["LLC", "Sole Proprietor", "Partnership"]),
-        regDate: `${randInt(2015, 2025)}-${String(randInt(1, 12)).padStart(2, "0")}-${String(randInt(1, 28)).padStart(2, "0")}`,
-        regCity: city,
-        regState: state,
-      },
-      contact_data: {
-        email: ownerEmail,
-        phone: randPhone(),
-        city,
-        state,
-        postal: String(randInt(100000, 999999)),
-      },
-      getAnchorData: {
-        virtualAccount: {
-          data: {
-            type: "DepositAccount",
-            id: anchorAccountId,
-            relationships: {
-              virtualNubans: { data: [] },
-              customer: { data: { type: "IndividualCustomer", id: anchorCustomerId } },
-              subAccounts: { data: [] },
-              accountNumbers: { data: [] },
-              program: { data: { type: "Program", id: "17333124341925436551-anc_prg" } },
-            },
-            attributes: {
-              type: "SAVINGS",
-              bank: { name: bank.name, nipCode: bank.nipCode, cbnCode: "", id: bank.id },
-              createdAt: createdAtISO,
-              currency: "NGN",
-              accountNumber: `******${accountNumber.slice(-4)}`,
-              status: "ACTIVE",
-              frozen: false,
-              accountName: ownerName,
-            },
+  const bizStatus = pick(["active", "active", "inactive"]);
+  const bizData: Record<string, any> = {
+    mock: true,
+    ownerId,
+    ownerName,
+    business_data: {
+      name: pick(bizNames),
+      desc: "A growing business powered by PadiPay",
+      bizAddress: `${randInt(1, 100)} ${pick(STREETS)}, ${city}`,
+      industry: pick(["Retail", "Agriculture", "Technology", "Logistics", "Food & Beverage"]),
+      regType: pick(["LLC", "Sole Proprietor", "Partnership"]),
+      regDate: `${randInt(2015, 2025)}-${String(randInt(1, 12)).padStart(2, "0")}-${String(randInt(1, 28)).padStart(2, "0")}`,
+      regCity: city,
+      regState: state,
+    },
+    contact_data: {
+      email: ownerEmail,
+      phone: randPhone(),
+      city,
+      state,
+      postal: String(randInt(100000, 999999)),
+    },
+    status: bizStatus,
+  };
+
+  if (bizStatus === "active") {
+    bizData.getAnchorData = {
+      virtualAccount: {
+        data: {
+          type: "DepositAccount",
+          id: anchorAccountId,
+          relationships: {
+            virtualNubans: { data: [] },
+            customer: { data: { type: "IndividualCustomer", id: anchorCustomerId } },
+            subAccounts: { data: [] },
+            accountNumbers: { data: [] },
+            program: { data: { type: "Program", id: "17333124341925436551-anc_prg" } },
+          },
+          attributes: {
+            type: "SAVINGS",
+            bank: { name: bank.name, nipCode: bank.nipCode, cbnCode: "", id: bank.id },
+            createdAt: createdAtISO,
+            currency: "NGN",
+            accountNumber,
+            status: "ACTIVE",
+            frozen: false,
+            accountName: ownerName,
           },
         },
       },
-      status: pick(["active", "active", "inactive"]),
-    },
-  };
+    };
+  }
+
+  return { id: uuid(), data: bizData };
 }
 
 // ── Main generation orchestrator ───────────────────────────────────────
@@ -721,15 +851,43 @@ export async function cleanupMockData(): Promise<{ deleted: Record<string, numbe
   const deleted: Record<string, number> = {};
 
   for (const col of collections) {
-    const snapshot = await getDb().collection(col).where("mock", "==", true).get();
-    if (snapshot.empty) continue;
-    const docs = snapshot.docs;
-    for (let i = 0; i < docs.length; i += 450) {
+    // Primary: delete docs with mock: true field
+    const byFlag = await getDb().collection(col).where("mock", "==", true).get();
+    // Secondary: for transactions, also catch old mock data where userId starts with "mock_"
+    const byUserId = col === "transactions"
+      ? await getDb().collection(col)
+          .where("userId", ">=", "mock_")
+          .where("userId", "<=", "mock_\uf8ff")
+          .get()
+      : null;
+    // Secondary: for users/businesses, also catch docs whose ID starts with "mock_" by querying by doc id field (not possible directly)
+    // Instead, fall back to a client-side scan for collections that store mock_ IDs as document IDs
+    let legacyDocs: admin.firestore.QueryDocumentSnapshot[] = [];
+    if (col === "users" || col === "businesses" || col === "loginLogs" || col === "blockedLogins" || col === "activityLogs" || col === "referrals") {
+      const allSnap = await getDb().collection(col).limit(500).get();
+      legacyDocs = allSnap.docs.filter(
+        (d) => !d.data().mock && d.id.startsWith("mock_")
+      );
+    }
+
+    const seen = new Set<string>();
+    const allDocs = [
+      ...byFlag.docs,
+      ...(byUserId ? byUserId.docs : []),
+      ...legacyDocs,
+    ].filter((d) => {
+      if (seen.has(d.id)) return false;
+      seen.add(d.id);
+      return true;
+    });
+
+    if (allDocs.length === 0) continue;
+    for (let i = 0; i < allDocs.length; i += 450) {
       const writeBatch = getDb().batch();
-      docs.slice(i, i + 450).forEach((d) => writeBatch.delete(d.ref));
+      allDocs.slice(i, i + 450).forEach((d) => writeBatch.delete(d.ref));
       await writeBatch.commit();
     }
-    deleted[col] = docs.length;
+    deleted[col] = allDocs.length;
   }
 
   logger.info("Mock data cleanup complete", deleted);

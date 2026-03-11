@@ -54,7 +54,7 @@ interface LoginLog {
     manufacturer: string;
   };
   networkType: string;
-  timestamp: Timestamp;
+  timestamp: Timestamp | string | number;
   userAgent: string;
   loginMethod?: LoginMethod;
   deviceType?: DeviceType;
@@ -170,14 +170,16 @@ export default function LoginLogsPage() {
     
     // Calculate active hours (logs in last 24 hours)
     const twentyFourHoursAgo = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const activeHours = loginLogs.filter(log => 
-      log.timestamp.toDate() > twentyFourHoursAgo
-    ).length;
+    const activeHours = loginLogs.filter(log => {
+      const ts = log.timestamp instanceof Timestamp ? log.timestamp.toDate() : new Date(log.timestamp);
+      return ts > twentyFourHoursAgo;
+    }).length;
     
     // Calculate average logins per day
     const logsByDate: { [date: string]: number } = {};
     loginLogs.forEach(log => {
-      const date = log.timestamp.toDate().toISOString().split('T')[0];
+      const ts = log.timestamp instanceof Timestamp ? log.timestamp.toDate() : new Date(log.timestamp);
+      const date = ts.toISOString().split('T')[0];
       logsByDate[date] = (logsByDate[date] || 0) + 1;
     });
     const averageLoginsPerDay = Object.keys(logsByDate).length > 0 
@@ -258,7 +260,7 @@ export default function LoginLogsPage() {
       const matchesDevice = deviceFilter === 'all' || log.deviceType === deviceFilter;
       
       // Date range filter
-      const logDate = log.timestamp.toDate();
+      const logDate = log.timestamp instanceof Timestamp ? log.timestamp.toDate() : new Date(log.timestamp);
       const matchesDate = (!dateRange.start || logDate >= dateRange.start) && 
                          (!dateRange.end || logDate <= dateRange.end);
 
@@ -358,10 +360,13 @@ export default function LoginLogsPage() {
     return <Globe className="w-4 h-4" />;
   };
 
-  const formatDate = (timestamp: Timestamp) => {
-    const date = timestamp.toDate();
+  const formatDate = (timestamp: Timestamp | string | number) => {
+    const date = timestamp instanceof Timestamp ? timestamp.toDate() : new Date(timestamp);
     return date.toLocaleDateString() + ' ' + date.toLocaleTimeString();
   };
+
+  const toDate = (timestamp: Timestamp | string | number): Date =>
+    timestamp instanceof Timestamp ? timestamp.toDate() : new Date(timestamp);
 
   const exportData = processedLogs.map(log => ({
     id: log.id,

@@ -274,7 +274,8 @@ export type AdminRoute =
   | "/seo"
   | "/admins"
   | "/activity-logs"
-  | "/settings";
+  | "/settings"
+  | "/data-tools";
 
 export interface RouteInfo {
   name: string;
