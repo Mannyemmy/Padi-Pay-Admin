@@ -28,6 +28,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   useEffect(() => {
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      setLoading(true);
       setUser(firebaseUser);
       if (firebaseUser) {
         const adminDoc = await getAdmin(firebaseUser.uid);

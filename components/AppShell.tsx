@@ -36,7 +36,7 @@ function pathAllowed(pathname: string, role?: 'admin' | 'customer_service' | 'co
 }
 
 export default function AppShell({ children }: { children: ReactNode }) {
-  const { user, admin, loading } = useAuth();
+  const { user, admin, loading, refreshAdmin } = useAuth();
   const router = useRouter();
   const pathname = usePathname();
   const isLogin = pathname === '/login';
@@ -45,9 +45,9 @@ export default function AppShell({ children }: { children: ReactNode }) {
   useEffect(() => {
     if (loading) return;
     if (!user && !isLogin && !isInspect) {
-      router.replace('/login');
+      router.replace(`/login?from=${encodeURIComponent(pathname)}`);
     }
-  }, [user, isLogin, isInspect, loading, router]);
+  }, [user, isLogin, isInspect, loading, pathname, router]);
 
   useEffect(() => {
     if (loading || !user || isLogin || isInspect || !admin?.role) return;
@@ -57,11 +57,18 @@ export default function AppShell({ children }: { children: ReactNode }) {
     }
   }, [admin?.role, user, loading, pathname, router, isLogin, isInspect]);
 
+  // If admin doc loaded but role is missing, the doc was fetched mid-write — retry.
+  useEffect(() => {
+    if (!loading && user && admin && !admin.role) {
+      refreshAdmin();
+    }
+  }, [loading, user, admin, refreshAdmin]);
+
   if (isLogin || isInspect) {
     return <div className="min-h-screen bg-gray-50">{children}</div>;
   }
 
-  if (loading || (!user && !isLogin)) {
+  if (loading || (!user && !isLogin) || (user && !admin && !isLogin) || (user && admin && !admin.role)) {
     return (
       <div className="flex items-center justify-center min-h-screen bg-gray-50">
         <Loading />
@@ -69,37 +76,8 @@ export default function AppShell({ children }: { children: ReactNode }) {
     );
   }
 
-  if (user && !admin && !isLogin) {
-    router.refresh();
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 text-gray-700">
-        <div className="text-center space-y-2">
-          <p className="text-lg font-semibold">Role not assigned</p>
-          <p className="text-sm text-gray-500">Your account does not have a role yet. Please contact an administrator.</p>
-        </div>
-      </div>
-    );
-  }
-
-  // If an admin profile exists but the `role` field is missing, show a clearer message to help debugging.
-  if (user && admin && !admin.role && !isLogin) {
-    // Helpful console log for debugging in the browser
-    // eslint-disable-next-line no-console
-    console.log('Auth admin without role:', admin);
-
-    return (
-      <div className="flex items-center justify-center min-h-screen bg-gray-50 text-gray-700">
-        <div className="text-center space-y-2">
-          <p className="text-lg font-semibold">Role not assigned</p>
-          <p className="text-sm text-gray-500">
-            Your account has an admin profile but no role assigned. Please contact a super-admin to assign a role.
-            <br />
-            <span className="text-xs text-gray-400">Admin id: {admin.id}</span>
-          </p>
-        </div>
-      </div>
-    );
-  }
+  // If an admin profile exists but the `role` field is missing, refreshAdmin() above handles it.
+  // Fallback: should not normally be reached.
 
   if (!pathAllowed(pathname, admin?.role)) {
     return (

@@ -12,7 +12,7 @@ function LoginContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const fromPath = searchParams.get('from');
-  const redirectTo = fromPath?.startsWith('/admin/v2') ? fromPath : '/';
+  const redirectTo = fromPath?.startsWith('/') ? fromPath : '/';
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

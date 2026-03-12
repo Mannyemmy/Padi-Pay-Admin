@@ -6,6 +6,7 @@ import {
   orderBy,
   getDocs,
   getDoc,
+  getDocFromServer,
   doc,
   updateDoc,
   setDoc,
@@ -253,7 +254,7 @@ export async function getAdmins(options?: MockFilterOptions) {
 
 export async function getAdmin(adminId: string) {
   const docRef = doc(db, "admins", adminId);
-  const docSnap = await getDoc(docRef);
+  const docSnap = await getDocFromServer(docRef);
   if (!docSnap.exists()) return null;
   const data = docSnap.data();
   return {
