@@ -2,7 +2,7 @@
 
 import { Suspense, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { signInAdmin, triggerPasswordReset } from '@/lib/auth';
+import { signInAdmin, triggerPasswordReset, sendAdminLoginEmailNotification } from '@/lib/auth';
 import { activityLogger } from '@/lib/services/activityLogger';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '@/lib/firebase';
@@ -61,6 +61,13 @@ function LoginContent() {
               userAgent,
               ipAddress
             );
+
+            void sendAdminLoginEmailNotification({
+              ipAddress,
+              userAgent,
+            }).catch((mailError) => {
+              console.warn('Admin login email failed:', mailError);
+            });
             
             console.log('Login logged for admin:', adminData.email);
           } else {
@@ -87,6 +94,13 @@ function LoginContent() {
             userAgent,
             ipAddress
           );
+
+          void sendAdminLoginEmailNotification({
+            ipAddress,
+            userAgent,
+          }).catch((mailError) => {
+            console.warn('Admin login email failed:', mailError);
+          });
         }
         
         // Redirect to intended destination (or dashboard)

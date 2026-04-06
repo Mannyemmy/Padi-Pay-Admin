@@ -259,6 +259,85 @@ export interface Permission {
   canEditSettings: boolean;
 }
 
+// BRM TYPES
+export type BrmStatus = "active" | "suspended";
+export type CommissionStatus = "accruing" | "pending" | "available" | "paid_out";
+export type CommissionType = "referral_bonus" | "fee_commission";
+export type CashoutStatus = "requested" | "processing" | "completed" | "failed";
+export type MerchantActivationStatus =
+  | "signed_up"
+  | "kyc_pending"
+  | "kyc_approved"
+  | "activated"
+  | "churned";
+
+export interface Brm {
+  id: string;
+  full_name: string;
+  first_name?: string;
+  last_name?: string;
+  email: string;
+  phone: string;
+  nin?: string;
+  date_of_birth?: string;
+  address?: string;
+  state: string;
+  lga: string;
+  referral_code: string;
+  status: BrmStatus;
+  bank_account_number?: string;
+  bank_name?: string;
+  bank_account_name?: string;
+  profile_photo_url?: string | null;
+  id_photo_url?: string | null;
+  created_at?: Date;
+  updated_at?: Date;
+  created_by?: string;
+}
+
+export interface BrmCommissionLedger {
+  id: string;
+  brm_id: string;
+  merchant_id?: string;
+  transaction_id?: string;
+  type: CommissionType;
+  gross_amount: number;
+  commission_amount: number;
+  status: CommissionStatus;
+  reason?: string; // for manual adjustments
+  created_at?: Date;
+  settled_at?: Date;
+  paid_out_at?: Date;
+}
+
+export interface BrmCashout {
+  id: string;
+  brm_id: string;
+  brm_name?: string;
+  amount: number;
+  bank_account_number: string;
+  bank_name: string;
+  bank_account_name: string;
+  status: CashoutStatus;
+  failure_reason?: string;
+  processed_by?: string;
+  requested_at?: Date;
+  processed_at?: Date;
+}
+
+export interface BrmMerchant {
+  id: string;
+  referring_brm_id: string;
+  business_name: string;
+  owner_name?: string;
+  phone?: string;
+  activation_status: MerchantActivationStatus;
+  activation_transaction_count: number;
+  referral_bonus_paid: boolean;
+  activated_at?: Date;
+  created_at?: Date;
+}
+
 // Define all available routes
 export type AdminRoute =
   | "/"
@@ -275,7 +354,8 @@ export type AdminRoute =
   | "/admins"
   | "/activity-logs"
   | "/settings"
-  | "/data-tools";
+  | "/data-tools"
+  | "/brm-agents";
 
 export interface RouteInfo {
   name: string;

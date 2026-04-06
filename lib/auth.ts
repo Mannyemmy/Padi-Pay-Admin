@@ -29,6 +29,14 @@ export async function triggerPasswordReset(email: string) {
   await sendPasswordResetEmail(auth, email);
 }
 
+export async function sendAdminLoginEmailNotification(input: {
+  ipAddress?: string;
+  userAgent?: string;
+}) {
+  const callable = httpsCallable(functions, 'sendAdminLoginEmail');
+  await callable(input);
+}
+
 export async function createAdminAccount(input: { email: string; name: string; role: AdminRole }) {
   const callable = httpsCallable(functions, 'createAdminAccount');
   const result = await callable(input);

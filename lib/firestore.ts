@@ -1,4 +1,4 @@
-import { db, auth, functions } from "./firebase";
+import { db, auth, functions, storage } from "./firebase";
 import {
   collection,
   query,
@@ -536,4 +536,267 @@ export async function logout(): Promise<void> {
 
 function getFirebaseFunction(): import("@firebase/functions").Functions {
   throw new Error("Function not implemented.");
+}
+
+// ─── BRM OPERATIONS ───────────────────────────────────────────────────────────
+
+import {
+  Brm,
+  BrmCommissionLedger,
+  BrmCashout,
+  BrmMerchant,
+  BrmStatus,
+} from "./types";
+
+export async function getBrms(): Promise<Brm[]> {
+  const q = query(collection(db, "brms"), orderBy("created_at", "desc"));
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      ...data,
+      created_at: data.created_at?.toDate ? data.created_at.toDate() : data.created_at,
+      updated_at: data.updated_at?.toDate ? data.updated_at.toDate() : data.updated_at,
+    } as Brm;
+  });
+}
+
+export async function getBrm(brmId: string): Promise<Brm | null> {
+  const snap = await getDoc(doc(db, "brms", brmId));
+  if (!snap.exists()) return null;
+  const data = snap.data();
+  return {
+    id: snap.id,
+    ...data,
+    created_at: data.created_at?.toDate ? data.created_at.toDate() : data.created_at,
+  } as Brm;
+}
+
+export async function updateBrmStatus(brmId: string, status: BrmStatus): Promise<void> {
+  await updateDoc(doc(db, "brms", brmId), {
+    status,
+    updated_at: serverTimestamp(),
+  });
+}
+
+/** Manual commission adjustment. Inserts a ledger record with type/reason and available status. */
+export async function adjustBrmCommission(
+  brmId: string,
+  amount: number,
+  reason: string,
+  adminId: string,
+): Promise<void> {
+  const ledgerRef = doc(collection(db, "brm_commission_ledger"));
+  await setDoc(ledgerRef, {
+    brm_id: brmId,
+    merchant_id: null,
+    transaction_id: null,
+    type: "manual_adjustment",
+    gross_amount: amount,
+    commission_amount: amount,
+    status: amount >= 0 ? "available" : "paid_out", // negative = debit, treat as paid_out
+    reason,
+    adjusted_by: adminId,
+    created_at: serverTimestamp(),
+  });
+}
+
+export async function getBrmCommissionSummary(brmId: string): Promise<{
+  totalEarned: number;
+  available: number;
+  pending: number;
+}> {
+  const q = query(collection(db, "brm_commission_ledger"), where("brm_id", "==", brmId));
+  const snap = await getDocs(q);
+  let totalEarned = 0;
+  let available = 0;
+  let pending = 0;
+  snap.docs.forEach((d) => {
+    const data = d.data();
+    const amt: number = data.commission_amount ?? 0;
+    if (data.status === "available" || data.status === "paid_out") totalEarned += amt;
+    if (data.status === "available") available += amt;
+    if (data.status === "pending" || data.status === "accruing") pending += amt;
+  });
+  return { totalEarned, available, pending };
+}
+
+export async function getPendingCashouts(): Promise<BrmCashout[]> {
+  const q = query(
+    collection(db, "brm_cashouts"),
+    where("status", "==", "requested"),
+    orderBy("requested_at", "asc"),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      ...data,
+      requested_at: data.requested_at?.toDate ? data.requested_at.toDate() : data.requested_at,
+      processed_at: data.processed_at?.toDate ? data.processed_at.toDate() : data.processed_at,
+    } as BrmCashout;
+  });
+}
+
+export async function approveCashout(cashoutId: string, adminId: string): Promise<void> {
+  await updateDoc(doc(db, "brm_cashouts", cashoutId), {
+    status: "processing",
+    processed_by: adminId,
+    processed_at: serverTimestamp(),
+  });
+}
+
+export async function rejectCashout(
+  cashoutId: string,
+  adminId: string,
+  reason: string,
+): Promise<void> {
+  await updateDoc(doc(db, "brm_cashouts", cashoutId), {
+    status: "failed",
+    failure_reason: reason,
+    processed_by: adminId,
+    processed_at: serverTimestamp(),
+  });
+}
+
+/** Merchants pending activation: kyc_approved but not yet activated */
+export async function getMerchantsAwaitingActivation(): Promise<BrmMerchant[]> {
+  const q = query(
+    collection(db, "merchants"),
+    where("activation_status", "==", "kyc_approved"),
+    orderBy("created_at", "desc"),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      ...data,
+      created_at: data.created_at?.toDate ? data.created_at.toDate() : data.created_at,
+      activated_at: data.activated_at?.toDate ? data.activated_at.toDate() : data.activated_at,
+    } as BrmMerchant;
+  });
+}
+
+/** Override: mark merchant as activated + credit ₦5,000 referral bonus to BRM */
+export async function overrideMerchantActivation(
+  merchantId: string,
+  brmId: string,
+  adminId: string,
+  reason: string,
+): Promise<void> {
+  // 1. Update merchant
+  await updateDoc(doc(db, "merchants", merchantId), {
+    activation_status: "activated",
+    referral_bonus_paid: true,
+    activated_at: serverTimestamp(),
+    activation_overridden_by: adminId,
+    activation_override_reason: reason,
+  });
+
+  // 2. Credit ₦5,000 referral bonus to BRM (skips pending, goes straight to available)
+  const ledgerRef = doc(collection(db, "brm_commission_ledger"));
+  await setDoc(ledgerRef, {
+    brm_id: brmId,
+    merchant_id: merchantId,
+    transaction_id: null,
+    type: "referral_bonus",
+    gross_amount: 5000,
+    commission_amount: 5000,
+    status: "available",
+    reason: `Manual activation override by admin ${adminId}: ${reason}`,
+    created_at: serverTimestamp(),
+  });
+}
+
+/**
+ * Upload a BRM agent photo/document to Firebase Storage.
+ * Returns the public download URL.
+ */
+export async function uploadBrmFile(
+  file: File,
+  brmUid: string,
+  slot: "profile_photo" | "id_photo",
+): Promise<string> {
+  const { ref, uploadBytes, getDownloadURL } = await import("firebase/storage");
+  const ext = file.name.split(".").pop() ?? "jpg";
+  const storageRef = ref(storage, `brms/${brmUid}/${slot}.${ext}`);
+  await uploadBytes(storageRef, file, { contentType: file.type });
+  return getDownloadURL(storageRef);
+}
+
+export interface CreateBrmPayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  phone: string;
+  nin?: string;
+  dateOfBirth?: string;
+  address?: string;
+  state?: string;
+  lga?: string;
+  profilePhotoUrl?: string;
+  idPhotoUrl?: string;
+}
+
+/**
+ * Calls the createBrmAgent Cloud Function which creates the brms/{uid}
+ * document and stores a bcrypt-hashed password in Firestore.
+ */
+export async function createBrmAgentFn(
+  payload: CreateBrmPayload,
+): Promise<{ uid: string; referralCode: string }> {
+  const callable = httpsCallable(functions, "createBrmAgent");
+  const result = await callable(payload);
+  return result.data as { uid: string; referralCode: string };
+}
+
+export async function sendBrmWelcomeEmailFn(payload: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+  referralCode: string;
+  loginUrl: string;
+}): Promise<void> {
+  const callable = httpsCallable(functions, "sendBrmWelcomeEmail");
+  await callable(payload);
+}
+
+export interface UpdateBrmPayload {
+  firstName?: string;
+  lastName?: string;
+  phone?: string;
+  nin?: string;
+  dateOfBirth?: string;
+  address?: string;
+  state?: string;
+  lga?: string;
+}
+
+export async function updateBrm(brmId: string, payload: UpdateBrmPayload): Promise<void> {
+  const updates: Record<string, any> = { updated_at: serverTimestamp() };
+  if (payload.firstName !== undefined || payload.lastName !== undefined) {
+    const ref = await getDoc(doc(db, "brms", brmId));
+    const existing = ref.data();
+    const first = payload.firstName ?? existing?.first_name ?? "";
+    const last = payload.lastName ?? existing?.last_name ?? "";
+    updates.first_name = first;
+    updates.last_name = last;
+    updates.full_name = `${first} ${last}`.trim();
+  }
+  if (payload.phone !== undefined) updates.phone = payload.phone;
+  if (payload.nin !== undefined) updates.nin = payload.nin;
+  if (payload.dateOfBirth !== undefined) updates.date_of_birth = payload.dateOfBirth;
+  if (payload.address !== undefined) updates.address = payload.address;
+  if (payload.state !== undefined) updates.state = payload.state;
+  if (payload.lga !== undefined) updates.lga = payload.lga;
+  await updateDoc(doc(db, "brms", brmId), updates);
+}
+
+export async function deleteBrm(brmId: string): Promise<void> {
+  await deleteDoc(doc(db, "brms", brmId));
 }

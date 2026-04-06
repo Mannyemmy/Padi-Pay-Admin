@@ -3,6 +3,7 @@ import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
+import * as bcrypt from "bcryptjs";
 import {generateMockData, cleanupMockData} from "./mockDataGenerator";
 
 // Initialize Firebase Admin
@@ -488,8 +489,353 @@ export const triggerMockDataCleanup = onCall(async (request) => {
 });
 
 /**
- * Write (or overwrite) the company/account_details doc with a 9Payment Service Bank account.
- * Balance is a random mock value stored directly; no Anchor API call needed.
+ * Create a new BRM (Business Relationship Manager) agent.
+ * Credentials are stored in Firestore only (bcrypt-hashed password).
+ * No Firebase Auth user is created — the agent logs in via brmLogin().
+ * Only admin-role callers can invoke this.
+ */
+export const createBrmAgent = onCall(async (request) => {
+  // Must be authenticated
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  // Caller must be an admin
+  const callerDoc = await admin
+    .firestore()
+    .collection("admins")
+    .doc(request.auth.uid)
+    .get();
+
+  if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+    throw new HttpsError(
+      "permission-denied",
+      "Only admins can create BRM agents"
+    );
+  }
+
+  const {
+    firstName,
+    lastName,
+    email,
+    password,
+    phone,
+    nin,
+    dateOfBirth,
+    address,
+    state,
+    lga,
+    profilePhotoUrl,
+    idPhotoUrl,
+  } = request.data;
+
+  // Basic validation
+  if (!firstName || !lastName || !email || !password || !phone) {
+    throw new HttpsError(
+      "invalid-argument",
+      "firstName, lastName, email, password and phone are required"
+    );
+  }
+
+  if (password.length < 8) {
+    throw new HttpsError(
+      "invalid-argument",
+      "Password must be at least 8 characters"
+    );
+  }
+
+  // Generate unique referral code: PADI-BRM-XXXX
+  function generateCode(): string {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    for (let i = 0; i < 6; i++) {
+      code += chars[Math.floor(Math.random() * chars.length)];
+    }
+    return `PADI-BRM-${code}`;
+  }
+
+  // Ensure uniqueness (retry up to 5 times)
+  let referralCode = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = generateCode();
+    const existing = await admin
+      .firestore()
+      .collection("brms")
+      .where("referral_code", "==", candidate)
+      .limit(1)
+      .get();
+    if (existing.empty) {
+      referralCode = candidate;
+      break;
+    }
+  }
+
+  if (!referralCode) {
+    throw new HttpsError("internal", "Could not generate a unique referral code");
+  }
+
+  // Check for existing BRM with same email before doing any heavy work
+  const emailConflictSnap = await admin
+    .firestore()
+    .collection("brms")
+    .where("email", "==", email)
+    .limit(1)
+    .get();
+  if (!emailConflictSnap.empty) {
+    throw new HttpsError("already-exists", "A BRM agent with this email already exists");
+  }
+
+  // Hash the password with bcrypt (salt rounds = 12)
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  try {
+    // Generate a Firestore doc ID as the BRM's uid (no Firebase Auth user created)
+    const brmRef = admin.firestore().collection("brms").doc();
+    const uid = brmRef.id;
+
+    await brmRef.set({
+      full_name: `${firstName} ${lastName}`,
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      phone,
+      nin: nin ?? null,
+      date_of_birth: dateOfBirth ?? null,
+      address: address ?? null,
+      state: state ?? null,
+      lga: lga ?? null,
+      profile_photo_url: profilePhotoUrl ?? null,
+      id_photo_url: idPhotoUrl ?? null,
+      referral_code: referralCode,
+      password_hash: passwordHash,
+      status: "active",
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_by: request.auth!.uid,
+    });
+
+    logger.info(`Created BRM (Firestore-only) doc: ${uid}, code: ${referralCode}`);
+    return {uid, referralCode};
+  } catch (error: unknown) {
+    logger.error("Error creating BRM agent:", error);
+    throw new HttpsError("internal", "Failed to create BRM agent");
+  }
+});
+
+/**
+ * Authenticate a BRM agent using Firestore credentials (bcrypt-hashed password).
+ * On success returns a Firebase Custom Token so the client can establish a
+ * Firebase session without ever having called signInWithEmailAndPassword.
+ * This function is intentionally unauthenticated — callers are logging in.
+ */
+export const brmLogin = onCall(async (request) => {
+  const {email, password} = request.data;
+
+  if (!email || !password) {
+    throw new HttpsError("invalid-argument", "Email and password are required");
+  }
+
+  // Look up BRM by email
+  const snap = await admin
+    .firestore()
+    .collection("brms")
+    .where("email", "==", email)
+    .limit(1)
+    .get();
+
+  // Use a generic message to avoid leaking whether the email exists
+  if (snap.empty) {
+    throw new HttpsError("unauthenticated", "Invalid email or password");
+  }
+
+  const brmDoc = snap.docs[0];
+  const brm = brmDoc.data();
+
+  if (brm.status === "suspended") {
+    throw new HttpsError(
+      "permission-denied",
+      "Your account has been suspended. Please contact support."
+    );
+  }
+
+  // Verify password against stored bcrypt hash
+  const storedHash: string | undefined = brm.password_hash;
+  if (!storedHash) {
+    // Accounts created before the bcrypt migration have no hash
+    logger.warn(`BRM ${brmDoc.id} has no password_hash — login rejected`);
+    throw new HttpsError("unauthenticated", "Invalid email or password");
+  }
+
+  const match = await bcrypt.compare(password, storedHash);
+  if (!match) {
+    throw new HttpsError("unauthenticated", "Invalid email or password");
+  }
+
+  // Issue a Firebase Custom Token so the client can use signInWithCustomToken.
+  // This gives the BRM a valid Firebase session (for Firestore reads) without
+  // ever storing credentials in Firebase Auth.
+  const customToken = await admin.auth().createCustomToken(brmDoc.id, {
+    brm: true,
+  });
+
+  logger.info(`BRM login success: ${brmDoc.id}`);
+  return {
+    customToken,
+    uid: brmDoc.id,
+    referralCode: brm.referral_code ?? null,
+  };
+});
+
+/**
+ * Reset a BRM password using an OTP previously emailed via the centralized
+ * sendEmailOTP function with purpose="password_reset".
+ */
+export const resetBrmPasswordWithOtp = onCall(async (request) => {
+  const {email, pinId, code, newPassword} = request.data;
+
+  if (!email || !pinId || !code || !newPassword) {
+    throw new HttpsError(
+      "invalid-argument",
+      "email, pinId, code and newPassword are required"
+    );
+  }
+
+  if (newPassword.length < 8) {
+    throw new HttpsError(
+      "invalid-argument",
+      "New password must be at least 8 characters"
+    );
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const otpRef = admin.firestore().collection("emailOtps").doc(String(pinId));
+  const otpSnap = await otpRef.get();
+
+  if (!otpSnap.exists) {
+    throw new HttpsError("not-found", "OTP request was not found");
+  }
+
+  const otp = otpSnap.data();
+  if (!otp) {
+    throw new HttpsError("not-found", "OTP request was not found");
+  }
+  if (otp.used) {
+    throw new HttpsError("failed-precondition", "OTP has already been used");
+  }
+  if (Date.now() > otp.expiresAt) {
+    throw new HttpsError("deadline-exceeded", "OTP has expired");
+  }
+  if (String(otp.email).trim().toLowerCase() !== normalizedEmail) {
+    throw new HttpsError("permission-denied", "OTP does not match this email");
+  }
+  if (otp.purpose !== "password_reset") {
+    throw new HttpsError("failed-precondition", "OTP is not valid for password reset");
+  }
+  if (String(otp.code) !== String(code).trim()) {
+    throw new HttpsError("unauthenticated", "Invalid OTP code");
+  }
+
+  const brmSnap = await admin
+    .firestore()
+    .collection("brms")
+    .where("email", "==", normalizedEmail)
+    .limit(1)
+    .get();
+
+  if (brmSnap.empty) {
+    throw new HttpsError("not-found", "No BRM account found for this email");
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  const brmRef = brmSnap.docs[0].ref;
+
+  await admin.firestore().runTransaction(async (tx) => {
+    tx.update(brmRef, {
+      password_hash: passwordHash,
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    tx.update(otpRef, {
+      used: true,
+      usedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  logger.info(`BRM password reset via OTP: ${brmRef.id}`);
+  return {success: true};
+});
+
+/**
+ * Change a BRM agent's own password while authenticated.
+ * Verifies the current password before updating the bcrypt hash in Firestore.
+ * Caller must be authenticated as a BRM (custom token session).
+ */
+export const changeBrmPassword = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  const {currentPassword, newPassword} = request.data;
+
+  if (!currentPassword || !newPassword) {
+    throw new HttpsError(
+      "invalid-argument",
+      "currentPassword and newPassword are required"
+    );
+  }
+
+  if (newPassword.length < 8) {
+    throw new HttpsError(
+      "invalid-argument",
+      "New password must be at least 8 characters"
+    );
+  }
+
+  if (currentPassword === newPassword) {
+    throw new HttpsError(
+      "invalid-argument",
+      "New password must differ from the current password"
+    );
+  }
+
+  // Fetch BRM doc by uid (the uid embedded in the custom token)
+  const brmRef = admin.firestore().collection("brms").doc(request.auth.uid);
+  const brmSnap = await brmRef.get();
+
+  if (!brmSnap.exists) {
+    throw new HttpsError("not-found", "BRM account not found");
+  }
+
+  const brm = brmSnap.data()!;
+
+  if (brm.status === "suspended") {
+    throw new HttpsError("permission-denied", "Account is suspended");
+  }
+
+  const storedHash: string | undefined = brm.password_hash;
+  if (!storedHash) {
+    throw new HttpsError(
+      "failed-precondition",
+      "No password is set for this account — use the reset flow instead"
+    );
+  }
+
+  const match = await bcrypt.compare(currentPassword, storedHash);
+  if (!match) {
+    throw new HttpsError("unauthenticated", "Current password is incorrect");
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 12);
+  await brmRef.update({
+    password_hash: newHash,
+    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  logger.info(`BRM password changed by self: ${request.auth.uid}`);
+  return {success: true};
+});
+
+
+ /* Balance is a random mock value stored directly; no Anchor API call needed.
  */
 export const seedCompanyAccount = onCall(async (request) => {
   if (!request.auth) {
