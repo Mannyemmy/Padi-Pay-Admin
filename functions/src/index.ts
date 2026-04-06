@@ -1,6 +1,7 @@
 import {setGlobalOptions} from "firebase-functions/v2";
 import {onCall, HttpsError} from "firebase-functions/v2/https";
 import {onSchedule} from "firebase-functions/v2/scheduler";
+import {onDocumentCreated} from "firebase-functions/v2/firestore";
 import * as admin from "firebase-admin";
 import * as logger from "firebase-functions/logger";
 import * as bcrypt from "bcryptjs";
@@ -871,4 +872,103 @@ export const seedCompanyAccount = onCall(async (request) => {
   logger.info("Company account seeded", {accountNumber, availableBalance});
   return {success: true, accountNumber, availableBalance};
 });
+
+/**
+ * Triggered whenever a new transaction doc is written to the `transactions`
+ * collection. If it is a successful ATM payment from a BRM-referred merchant,
+ * this function:
+ *  1. Increments the merchant’s activation_transaction_count.
+ *  2. Updates last_transaction_at on the merchant doc.
+ *  3. Awards a \u20a65,000 referral bonus when the count first hits 10.
+ *  4. Records 50 % of padipay_fee_naira as a fee_commission ledger entry.
+ */
+export const onTransactionCreated = onDocumentCreated(
+  "transactions/{txId}",
+  async (event) => {
+    const tx = event.data?.data();
+    if (!tx) return;
+
+    // Only process successful ATM payments
+    if (tx["type"] !== "atm_payment" || tx["status"] !== "success") return;
+
+    const userId: string | undefined = tx["userId"];
+    if (!userId) return;
+
+    const db = admin.firestore();
+
+    // Look up the merchant doc (doc ID == Firebase Auth UID of the merchant)
+    const merchantRef = db.collection("merchants").doc(userId);
+    const merchantSnap = await merchantRef.get();
+    if (!merchantSnap.exists) return; // not a BRM-referred merchant
+
+    const merchant = merchantSnap.data()!;
+    const brmId: string | undefined = merchant["referring_brm_id"];
+    if (!brmId) return;
+
+    const feeNaira: number = typeof tx["padipay_fee_naira"] === "number"
+      ? tx["padipay_fee_naira"]
+      : 0;
+
+    const currentCount: number = merchant["activation_transaction_count"] ?? 0;
+    const newCount = currentCount + 1;
+    const referralBonusPaid: boolean = merchant["referral_bonus_paid"] ?? false;
+
+    const batch = db.batch();
+
+    // 1. Update merchant tracking fields
+    const merchantUpdate: Record<string, unknown> = {
+      activation_transaction_count: newCount,
+      last_transaction_at: admin.firestore.FieldValue.serverTimestamp(),
+    };
+
+    // 2. Referral bonus at 10 transactions
+    if (newCount >= 10 && !referralBonusPaid) {
+      merchantUpdate["activation_status"] = "activated";
+      merchantUpdate["referral_bonus_paid"] = true;
+      merchantUpdate["activated_at"] = admin.firestore.FieldValue.serverTimestamp();
+
+      const bonusRef = db.collection("brm_commission_ledger").doc();
+      batch.set(bonusRef, {
+        brm_id: brmId,
+        merchant_id: userId,
+        type: "referral_bonus",
+        gross_amount: 5000,
+        commission_amount: 5000,
+        status: "available",
+        description: `Referral bonus — ${merchant["business_name"] ?? userId}`,
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      logger.info(`BRM ${brmId} referral bonus awarded for merchant ${userId}`);
+    } else if (newCount < 10 && merchant["activation_status"] === "kyc_approved") {
+      // already kyc_approved, just tracking count — no status change needed
+    } else if (newCount === 1 && merchant["activation_status"] === "signed_up") {
+      // First transaction — bump to kyc_approved if still at signed_up
+      // (KYC happens outside this trigger, but keep activation_status consistent)
+    }
+
+    batch.update(merchantRef, merchantUpdate);
+
+    // 3. Fee commission (50 % of PadiPay fee)
+    if (feeNaira > 0) {
+      const commissionAmount = Math.round(feeNaira * 0.5 * 100) / 100;
+      const commissionRef = db.collection("brm_commission_ledger").doc();
+      batch.set(commissionRef, {
+        brm_id: brmId,
+        merchant_id: userId,
+        transaction_id: event.data?.id,
+        type: "fee_commission",
+        gross_amount: feeNaira,
+        commission_amount: commissionAmount,
+        status: "accruing",
+        created_at: admin.firestore.FieldValue.serverTimestamp(),
+      });
+    }
+
+    await batch.commit();
+    logger.info(
+      `BRM commission processed: brm=${brmId} merchant=${userId} count=${newCount} fee=\u20a6${feeNaira}`
+    );
+  }
+);
 
