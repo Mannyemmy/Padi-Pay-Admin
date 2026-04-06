@@ -769,12 +769,15 @@ export async function sendBrmWelcomeEmailFn(payload: {
 export interface UpdateBrmPayload {
   firstName?: string;
   lastName?: string;
+  email?: string;
   phone?: string;
   nin?: string;
   dateOfBirth?: string;
   address?: string;
   state?: string;
   lga?: string;
+  profilePhotoUrl?: string;
+  idPhotoUrl?: string;
 }
 
 export async function updateBrm(brmId: string, payload: UpdateBrmPayload): Promise<void> {
@@ -788,12 +791,15 @@ export async function updateBrm(brmId: string, payload: UpdateBrmPayload): Promi
     updates.last_name = last;
     updates.full_name = `${first} ${last}`.trim();
   }
+  if (payload.email !== undefined) updates.email = payload.email;
   if (payload.phone !== undefined) updates.phone = payload.phone;
   if (payload.nin !== undefined) updates.nin = payload.nin;
   if (payload.dateOfBirth !== undefined) updates.date_of_birth = payload.dateOfBirth;
   if (payload.address !== undefined) updates.address = payload.address;
   if (payload.state !== undefined) updates.state = payload.state;
   if (payload.lga !== undefined) updates.lga = payload.lga;
+  if (payload.profilePhotoUrl !== undefined) updates.profile_photo_url = payload.profilePhotoUrl;
+  if (payload.idPhotoUrl !== undefined) updates.id_photo_url = payload.idPhotoUrl;
   await updateDoc(doc(db, "brms", brmId), updates);
 }
 
