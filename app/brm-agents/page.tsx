@@ -41,6 +41,7 @@ import {
   sendBrmWelcomeEmailFn,
   updateBrm,
   deleteBrm,
+  getMerchantsByBrm,
 } from '@/lib/firestore';
 import { Brm, BrmCashout, BrmMerchant } from '@/lib/types';
 
@@ -207,6 +208,7 @@ export default function BrmAgentsPage() {
   const [brmSummaries, setBrmSummaries] = useState<
     Record<string, { totalEarned: number; available: number; pending: number }>
   >({});
+  const [brmMerchants, setBrmMerchants] = useState<Record<string, BrmMerchant[]>>({});
 
   // Adjust modal
   const [adjustTarget, setAdjustTarget] = useState<Brm | null>(null);
@@ -300,6 +302,16 @@ export default function BrmAgentsPage() {
     try {
       const s = await getBrmCommissionSummary(brmId);
       setBrmSummaries((prev) => ({ ...prev, [brmId]: s }));
+    } catch {
+      // non-critical
+    }
+  }
+
+  async function loadBrmMerchants(brmId: string) {
+    if (brmMerchants[brmId]) return;
+    try {
+      const m = await getMerchantsByBrm(brmId);
+      setBrmMerchants((prev) => ({ ...prev, [brmId]: m }));
     } catch {
       // non-critical
     }
@@ -738,7 +750,7 @@ export default function BrmAgentsPage() {
                                   <button
                                     onClick={() => {
                                       setExpandedBrm(isExpanded ? null : brm.id);
-                                      if (!isExpanded) loadBrmSummary(brm.id);
+                                      if (!isExpanded) { loadBrmSummary(brm.id); loadBrmMerchants(brm.id); }
                                     }}
                                     className="cursor-pointer text-gray-400 hover:text-gray-600"
                                   >
@@ -779,7 +791,7 @@ export default function BrmAgentsPage() {
                               <td className="py-3 text-right">
                                 <div className="flex items-center justify-end gap-2">
                                   <button
-                                    onClick={() => { setProfileTarget(brm); loadBrmSummary(brm.id); }}
+                                    onClick={() => { setProfileTarget(brm); loadBrmSummary(brm.id); loadBrmMerchants(brm.id); }}
                                     title="View profile"
                                     className="p-1.5 rounded-lg border border-gray-200 text-gray-500 hover:text-blue-600 hover:border-blue-200 dark:border-gray-700 dark:hover:border-blue-700 transition-colors cursor-pointer"
                                   >
@@ -852,6 +864,20 @@ export default function BrmAgentsPage() {
                                       <p className="text-gray-400 text-xs mb-1">Member Since</p>
                                       <p className="font-semibold text-gray-700 dark:text-gray-300">
                                         {formatDate(brm.created_at)}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-gray-400 text-xs mb-1">Merchants Referred</p>
+                                      <p className="font-semibold text-gray-900 dark:text-gray-100">
+                                        {brmMerchants[brm.id] ? brmMerchants[brm.id].length : '…'}
+                                      </p>
+                                    </div>
+                                    <div>
+                                      <p className="text-gray-400 text-xs mb-1">Activated</p>
+                                      <p className="font-semibold text-blue-600">
+                                        {brmMerchants[brm.id]
+                                          ? brmMerchants[brm.id].filter((m) => m.activation_status === 'activated').length
+                                          : '…'}
                                       </p>
                                     </div>
                                     {brm.bank_name && (
@@ -1364,6 +1390,53 @@ export default function BrmAgentsPage() {
                       <p className="text-xs text-gray-400 mb-0.5">Pending</p>
                       <p className="font-semibold text-orange-500 text-sm">{summary ? formatNaira(summary.pending) : '…'}</p>
                     </div>
+                  </div>
+
+                  {/* Referred Merchants */}
+                  <div>
+                    <p className="text-xs font-medium text-gray-400 mb-2 uppercase tracking-wide">
+                      Referred Merchants ({brmMerchants[profileTarget.id]?.length ?? '…'})
+                    </p>
+                    {!brmMerchants[profileTarget.id] ? (
+                      <p className="text-sm text-gray-400">Loading…</p>
+                    ) : brmMerchants[profileTarget.id].length === 0 ? (
+                      <p className="text-sm text-gray-400">No merchants referred yet.</p>
+                    ) : (
+                      <div className="space-y-2 max-h-52 overflow-y-auto pr-1">
+                        {brmMerchants[profileTarget.id].map((m) => {
+                          const statusColors: Record<string, string> = {
+                            signed_up: 'bg-gray-100 text-gray-600 dark:bg-gray-700 dark:text-gray-300',
+                            kyc_pending: 'bg-yellow-100 text-yellow-700 dark:bg-yellow-900/40 dark:text-yellow-300',
+                            kyc_approved: 'bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300',
+                            activated: 'bg-green-100 text-green-700 dark:bg-green-900/40 dark:text-green-300',
+                            churned: 'bg-red-100 text-red-600 dark:bg-red-900/40 dark:text-red-300',
+                          };
+                          const statusLabel: Record<string, string> = {
+                            signed_up: 'Signed Up',
+                            kyc_pending: 'KYC Pending',
+                            kyc_approved: 'KYC Approved',
+                            activated: 'Activated',
+                            churned: 'Churned',
+                          };
+                          return (
+                            <div key={m.id} className="flex items-center justify-between px-3 py-2 rounded-lg bg-gray-50 dark:bg-gray-800 text-sm">
+                              <div>
+                                <p className="font-medium text-gray-900 dark:text-gray-100">{m.business_name}</p>
+                                {m.owner_name && <p className="text-xs text-gray-400">{m.owner_name} · {m.phone ?? ''}</p>}
+                              </div>
+                              <div className="flex items-center gap-2 shrink-0 ml-3">
+                                <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${statusColors[m.activation_status] ?? 'bg-gray-100 text-gray-600'}`}>
+                                  {statusLabel[m.activation_status] ?? m.activation_status}
+                                </span>
+                                {m.activation_status !== 'activated' && (
+                                  <span className="text-xs text-gray-400">{m.activation_transaction_count ?? 0}/10 txns</span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    )}
                   </div>
                 </div>
               </div>

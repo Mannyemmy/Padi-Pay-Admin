@@ -843,53 +843,107 @@ export async function generateMockData(
   return { created: counts };
 }
 
-export async function cleanupMockData(): Promise<{ deleted: Record<string, number> }> {
+export async function cleanupMockData(): Promise<{ deleted: Record<string, number>; errors: Record<string, string> }> {
   const collections = [
     "users", "transactions", "loginLogs", "blockedLogins",
     "activityLogs", "referrals", "businesses",
   ];
   const deleted: Record<string, number> = {};
+  const errors: Record<string, string> = {};
+
+  const deleteSnapshotInBatches = async (
+    col: string,
+    snap: admin.firestore.QuerySnapshot,
+    errorKeyPrefix: string,
+  ): Promise<number> => {
+    let removed = 0;
+    const docs = snap.docs;
+    for (let i = 0; i < docs.length; i += 450) {
+      try {
+        const writeBatch = getDb().batch();
+        docs.slice(i, i + 450).forEach((d) => writeBatch.delete(d.ref));
+        await writeBatch.commit();
+        removed += Math.min(450, docs.length - i);
+      } catch (batchErr) {
+        const msg = batchErr instanceof Error ? batchErr.message : String(batchErr);
+        logger.error(`Mock cleanup: batch delete failed in "${col}" at offset ${i}`, batchErr);
+        errors[`${errorKeyPrefix}[${i}]`] = msg;
+      }
+    }
+    return removed;
+  };
 
   for (const col of collections) {
-    // Primary: delete docs with mock: true field
-    const byFlag = await getDb().collection(col).where("mock", "==", true).get();
-    // Secondary: for transactions, also catch old mock data where userId starts with "mock_"
-    const byUserId = col === "transactions"
-      ? await getDb().collection(col)
-          .where("userId", ">=", "mock_")
-          .where("userId", "<=", "mock_\uf8ff")
-          .get()
-      : null;
-    // Secondary: for users/businesses, also catch docs whose ID starts with "mock_" by querying by doc id field (not possible directly)
-    // Instead, fall back to a client-side scan for collections that store mock_ IDs as document IDs
-    let legacyDocs: admin.firestore.QueryDocumentSnapshot[] = [];
-    if (col === "users" || col === "businesses" || col === "loginLogs" || col === "blockedLogins" || col === "activityLogs" || col === "referrals") {
-      const allSnap = await getDb().collection(col).limit(500).get();
-      legacyDocs = allSnap.docs.filter(
-        (d) => !d.data().mock && d.id.startsWith("mock_")
-      );
-    }
+    try {
+      let totalDeletedForCollection = 0;
 
-    const seen = new Set<string>();
-    const allDocs = [
-      ...byFlag.docs,
-      ...(byUserId ? byUserId.docs : []),
-      ...legacyDocs,
-    ].filter((d) => {
-      if (seen.has(d.id)) return false;
-      seen.add(d.id);
-      return true;
-    });
+      // 1) Repeatedly delete docs with mock: true in small chunks
+      while (true) {
+        const byFlag = await getDb()
+          .collection(col)
+          .where("mock", "==", true)
+          .limit(450)
+          .get();
+        if (byFlag.empty) break;
+        totalDeletedForCollection += await deleteSnapshotInBatches(col, byFlag, `${col}:mock`);
+      }
 
-    if (allDocs.length === 0) continue;
-    for (let i = 0; i < allDocs.length; i += 450) {
-      const writeBatch = getDb().batch();
-      allDocs.slice(i, i + 450).forEach((d) => writeBatch.delete(d.ref));
-      await writeBatch.commit();
+      // 2) Transactions with userId prefix mock_
+      if (col === "transactions") {
+        while (true) {
+          const byUserId = await getDb()
+            .collection(col)
+            .where("userId", ">=", "mock_")
+            .where("userId", "<=", "mock_\uf8ff")
+            .limit(450)
+            .get();
+          if (byUserId.empty) break;
+          totalDeletedForCollection += await deleteSnapshotInBatches(col, byUserId, `${col}:userId`);
+        }
+      }
+
+      // 3) Paginated full-scan for legacy mock_ doc IDs, processed page-by-page
+      const needsFullScan = ["users", "businesses", "loginLogs", "blockedLogins", "activityLogs", "referrals"].includes(col);
+      if (needsFullScan) {
+        let lastDoc: admin.firestore.QueryDocumentSnapshot | null = null;
+        while (true) {
+          let q = getDb().collection(col).orderBy(admin.firestore.FieldPath.documentId()).limit(500);
+          if (lastDoc) q = q.startAfter(lastDoc);
+          const page = await q.get();
+          if (page.empty) break;
+
+          const legacyDocs = page.docs.filter(
+            (d) => !d.data().mock && d.id.startsWith("mock_")
+          );
+
+          if (legacyDocs.length > 0) {
+            for (let i = 0; i < legacyDocs.length; i += 450) {
+              try {
+                const writeBatch = getDb().batch();
+                legacyDocs.slice(i, i + 450).forEach((d) => writeBatch.delete(d.ref));
+                await writeBatch.commit();
+                totalDeletedForCollection += Math.min(450, legacyDocs.length - i);
+              } catch (batchErr) {
+                const msg = batchErr instanceof Error ? batchErr.message : String(batchErr);
+                logger.error(`Mock cleanup: legacy batch delete failed in "${col}" at offset ${i}`, batchErr);
+                errors[`${col}:legacy[${i}]`] = msg;
+              }
+            }
+          }
+
+          if (page.docs.length < 500) break;
+          lastDoc = page.docs[page.docs.length - 1];
+        }
+      }
+
+      deleted[col] = totalDeletedForCollection;
+    } catch (colErr) {
+      const msg = colErr instanceof Error ? colErr.message : String(colErr);
+      logger.error(`Mock cleanup: failed to process collection "${col}"`, colErr);
+      errors[col] = msg;
     }
-    deleted[col] = allDocs.length;
   }
 
-  logger.info("Mock data cleanup complete", deleted);
-  return { deleted };
+  logger.info("Mock data cleanup complete", { deleted, errors });
+  return { deleted, errors };
 }

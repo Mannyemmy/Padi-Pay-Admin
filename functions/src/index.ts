@@ -462,7 +462,7 @@ export const triggerMockDataGeneration = onCall(async (request) => {
  * Callable: delete all mock data from Firestore.
  * Only admins can call this.
  */
-export const triggerMockDataCleanup = onCall(async (request) => {
+export const triggerMockDataCleanup = onCall({memory: "1GiB", timeoutSeconds: 540}, async (request) => {
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "User must be authenticated");
   }
@@ -482,6 +482,9 @@ export const triggerMockDataCleanup = onCall(async (request) => {
 
   try {
     const result = await cleanupMockData();
+    if (Object.keys(result.errors).length > 0) {
+      logger.error("Mock data cleanup finished with errors", result.errors);
+    }
     return {success: true, ...result};
   } catch (err) {
     logger.error("Mock data cleanup failed", err);

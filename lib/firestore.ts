@@ -800,3 +800,22 @@ export async function updateBrm(brmId: string, payload: UpdateBrmPayload): Promi
 export async function deleteBrm(brmId: string): Promise<void> {
   await deleteDoc(doc(db, "brms", brmId));
 }
+
+/** All merchants referred by a given BRM (all activation statuses). */
+export async function getMerchantsByBrm(brmId: string): Promise<BrmMerchant[]> {
+  const q = query(
+    collection(db, "merchants"),
+    where("referring_brm_id", "==", brmId),
+    orderBy("created_at", "desc"),
+  );
+  const snap = await getDocs(q);
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      ...data,
+      created_at: data.created_at?.toDate ? data.created_at.toDate() : data.created_at,
+      activated_at: data.activated_at?.toDate ? data.activated_at.toDate() : data.activated_at,
+    } as BrmMerchant;
+  });
+}
