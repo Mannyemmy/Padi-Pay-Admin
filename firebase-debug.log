@@ -1,0 +1,30 @@
+[debug] [2026-04-07T11:06:58.085Z] ----------------------------------------------------------------------
+[debug] [2026-04-07T11:06:58.088Z] Command:       C:\Program Files\nodejs\node.exe C:\Users\DELL\AppData\Roaming\npm\node_modules\firebase-tools\lib\bin\firebase.js deploy --only functions:createAdminAccount,functions:updateUserEmail,functions:brmLogin,functions:resetBrmPasswordWithOtp,functions:createBrmAgent
+[debug] [2026-04-07T11:06:58.089Z] CLI Version:   15.3.1
+[debug] [2026-04-07T11:06:58.089Z] Platform:      win32
+[debug] [2026-04-07T11:06:58.089Z] Node Version:  v24.13.0
+[debug] [2026-04-07T11:06:58.089Z] Time:          Tue Apr 07 2026 12:06:58 GMT+0100 (West Africa Standard Time)
+[debug] [2026-04-07T11:06:58.089Z] ----------------------------------------------------------------------
+[debug] 
+[debug] [2026-04-07T11:07:00.329Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-04-07T11:07:00.329Z] > authorizing via signed-in user (mannyemmy4@gmail.com)
+[debug] [2026-04-07T11:07:00.330Z] [iam] checking project card-app-829ee for permissions ["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]
+[debug] [2026-04-07T11:07:00.332Z] Checked if tokens are valid: true, expires at: 1775563542700
+[debug] [2026-04-07T11:07:00.333Z] Checked if tokens are valid: true, expires at: 1775563542700
+[debug] [2026-04-07T11:07:00.335Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/card-app-829ee:testIamPermissions [none]
+[debug] [2026-04-07T11:07:00.335Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/card-app-829ee:testIamPermissions x-goog-quota-user=projects/card-app-829ee
+[debug] [2026-04-07T11:07:00.336Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/card-app-829ee:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-04-07T11:07:01.486Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/card-app-829ee:testIamPermissions 200
+[debug] [2026-04-07T11:07:01.487Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/card-app-829ee:testIamPermissions {"permissions":["cloudfunctions.functions.create","cloudfunctions.functions.delete","cloudfunctions.functions.get","cloudfunctions.functions.list","cloudfunctions.functions.update","cloudfunctions.operations.get","firebase.projects.get"]}
+[debug] [2026-04-07T11:07:01.487Z] Checked if tokens are valid: true, expires at: 1775563542700
+[debug] [2026-04-07T11:07:01.488Z] Checked if tokens are valid: true, expires at: 1775563542700
+[debug] [2026-04-07T11:07:01.488Z] >>> [apiv2][query] POST https://iam.googleapis.com/v1/projects/card-app-829ee/serviceAccounts/card-app-829ee@appspot.gserviceaccount.com:testIamPermissions [none]
+[debug] [2026-04-07T11:07:01.488Z] >>> [apiv2][body] POST https://iam.googleapis.com/v1/projects/card-app-829ee/serviceAccounts/card-app-829ee@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[debug] [2026-04-07T11:07:02.582Z] <<< [apiv2][status] POST https://iam.googleapis.com/v1/projects/card-app-829ee/serviceAccounts/card-app-829ee@appspot.gserviceaccount.com:testIamPermissions 200
+[debug] [2026-04-07T11:07:02.582Z] <<< [apiv2][body] POST https://iam.googleapis.com/v1/projects/card-app-829ee/serviceAccounts/card-app-829ee@appspot.gserviceaccount.com:testIamPermissions {"permissions":["iam.serviceAccounts.actAs"]}
+[info] 
+[info] === Deploying to 'card-app-829ee'...
+[info] 
+[info] i  deploying functions 
+[info] Running command: npm --prefix "$RESOURCE_DIR" run lint
+[info] Running command: npm --prefix "$RESOURCE_DIR" run build

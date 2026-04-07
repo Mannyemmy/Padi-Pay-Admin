@@ -7,6 +7,8 @@ import * as logger from "firebase-functions/logger";
 import * as bcrypt from "bcryptjs";
 import {generateMockData, cleanupMockData} from "./mockDataGenerator";
 
+import * as crypto from "crypto";
+
 // Initialize Firebase Admin
 admin.initializeApp();
 
@@ -53,9 +55,9 @@ export const createAdminAccount = onCall(async (request) => {
   }
 
   try {
-    // Generate a random password (user will reset it via email)
-    const tempPassword = Math.random().toString(36).slice(-12) +
-      Math.random().toString(36).slice(-12);
+    // SECURITY: Use crypto.randomBytes for the temporary password — Math.random() is
+    // not cryptographically secure. The user resets this immediately via the link below.
+    const tempPassword = crypto.randomBytes(16).toString("hex");
 
     // Create the auth user
     const userRecord = await admin.auth().createUser({
@@ -202,6 +204,22 @@ export const updateUserEmail = onCall(async (request) => {
   // Check if the caller is authenticated
   if (!request.auth) {
     throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  // SECURITY: Admin role check required — without this any authenticated user
+  // (e.g. a regular app user) could update any other user's email, enabling
+  // account takeover. All privileged write operations must verify role first.
+  const callerDoc = await admin
+    .firestore()
+    .collection("admins")
+    .doc(request.auth.uid)
+    .get();
+
+  if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+    throw new HttpsError(
+      "permission-denied",
+      "Only admins can update user emails"
+    );
   }
 
   const {userId, newEmail} = request.data;
@@ -549,11 +567,14 @@ export const createBrmAgent = onCall(async (request) => {
   }
 
   // Generate unique referral code: PADI-BRM-XXXX
+  // SECURITY: Use crypto.randomBytes for referral code generation.
+  // Math.random() is not cryptographically secure and could be predicted.
   function generateCode(): string {
     const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
     let code = "";
+    const randomBytes = crypto.randomBytes(6);
     for (let i = 0; i < 6; i++) {
-      code += chars[Math.floor(Math.random() * chars.length)];
+      code += chars[randomBytes[i] % chars.length];
     }
     return `PADI-BRM-${code}`;
   }
@@ -670,9 +691,35 @@ export const brmLogin = onCall(async (request) => {
     throw new HttpsError("unauthenticated", "Invalid email or password");
   }
 
+  // SECURITY: Brute-force lockout for BRM login.
+  // bcrypt.compare is intentionally slow, but an attacker can still flood
+  // requests in parallel. Track failures in Firestore and lock for 15 minutes
+  // after 5 consecutive failures to slow credential-stuffing attacks.
+  const failedAttempts = (brm.failedLoginAttempts || 0);
+  const lockedUntil = brm.lockedUntil || 0;
+
+  if (lockedUntil > Date.now()) {
+    const minutesLeft = Math.ceil((lockedUntil - Date.now()) / 60000);
+    throw new HttpsError(
+      "resource-exhausted",
+      `Account temporarily locked. Try again in ${minutesLeft} minute(s).`
+    );
+  }
+
   const match = await bcrypt.compare(password, storedHash);
   if (!match) {
+    const newAttempts = failedAttempts + 1;
+    const updateData: Record<string, any> = {failedLoginAttempts: newAttempts};
+    if (newAttempts >= 5) {
+      updateData.lockedUntil = Date.now() + 15 * 60 * 1000; // lock 15 minutes
+    }
+    await brmDoc.ref.update(updateData);
     throw new HttpsError("unauthenticated", "Invalid email or password");
+  }
+
+  // Reset failed attempts on successful login
+  if (failedAttempts > 0) {
+    await brmDoc.ref.update({failedLoginAttempts: 0, lockedUntil: 0});
   }
 
   // Issue a Firebase Custom Token so the client can use signInWithCustomToken.
@@ -735,7 +782,16 @@ export const resetBrmPasswordWithOtp = onCall(async (request) => {
   if (otp.purpose !== "password_reset") {
     throw new HttpsError("failed-precondition", "OTP is not valid for password reset");
   }
+
+  const MAX_ATTEMPTS = 5;
+  const attempts = (otp.attempts || 0) + 1;
+  if (attempts > MAX_ATTEMPTS) {
+    await otpRef.update({used: true});
+    throw new HttpsError("resource-exhausted", "Too many incorrect attempts. Request a new OTP.");
+  }
+
   if (String(otp.code) !== String(code).trim()) {
+    await otpRef.update({attempts});
     throw new HttpsError("unauthenticated", "Invalid OTP code");
   }
 

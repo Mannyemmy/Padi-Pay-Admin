@@ -32,9 +32,6 @@ import { getTransactions, getUsers } from "@/lib/firestore";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 
-const FETCH_BALANCE_URL =
-  "https://us-central1-card-app-829ee.cloudfunctions.net/fetchAccountBalanceHttp";
-
 type AccountBalanceResp = {
   data?: {
     availableBalance?: number;
@@ -59,23 +56,6 @@ const getAccountId = (entity: User | Business): string | null => {
 /** Return a random realistic NGN balance for mock entities (avoids hitting real Anchor API) */
 const mockBalance = (): number =>
   Math.floor(Math.random() * 490000 + 10000);
-async function fetchAccountBalanceHttp(
-  accountId: string,
-): Promise<AccountBalanceResp> {
-  const url = `${FETCH_BALANCE_URL}`;
-  const res = await fetch(url, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ accountId }),
-  });
-  if (!res.ok) {
-    const text = await res.text().catch(() => "");
-    throw new Error(
-      `Failed to fetch account balance: ${res.status} ${res.statusText} ${text}`,
-    );
-  }
-  return res.json();
-}
 import { Business, Transaction, User } from "@/lib/types";
 import { useDemoMode } from "@/lib/demo";
 
@@ -262,8 +242,13 @@ export default function DashboardPage() {
               setCompanyLoading(true);
               setCompanyError(null);
               try {
-                const resp = await fetchAccountBalanceHttp(String(accountId));
-                const d = resp?.data;
+                // SECURITY: Use the Firebase callable (fetchAccountBalance) rather than
+                // the raw HTTP endpoint (fetchAccountBalanceHttp). The callable automatically
+                // attaches the Firebase Auth ID token, so the function can verify the caller.
+                // The HTTP endpoint requires a separate Bearer token and should only be
+                // called by server-side internal services, not browser clients.
+                const resp = await fetchAccountBalance({ accountId: String(accountId) });
+                const d = (resp?.data as any)?.data;
                 if (d) {
                   setCompanyBalance({
                     availableBalance: Number(d.availableBalance || 0),
