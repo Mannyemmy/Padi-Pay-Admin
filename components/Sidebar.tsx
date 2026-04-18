@@ -96,8 +96,19 @@ export default function Sidebar() {
 
             // Get client information for logging
             const userAgent = navigator.userAgent || "unknown";
-            const ipResponse = await fetch("/api/ip");
-            const { ip } = await ipResponse.json();
+            let ip = "unknown";
+            try {
+              const controller = new AbortController();
+              const timeoutId = setTimeout(() => controller.abort(), 3000);
+              const ipResponse = await fetch("/api/ip", { signal: controller.signal });
+              clearTimeout(timeoutId);
+              if (ipResponse.ok) {
+                const data = await ipResponse.json();
+                ip = data.ip || "unknown";
+              }
+            } catch {
+              // IP fetch is non-critical, continue with "unknown"
+            }
 
             // Log logout activity
             await activityLogger.logLogout(

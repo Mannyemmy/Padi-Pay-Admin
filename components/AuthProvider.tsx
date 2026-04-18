@@ -27,18 +27,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const unsub = onAuthStateChanged(auth, async (firebaseUser) => {
+      if (!isMounted) return;
       setLoading(true);
       setUser(firebaseUser);
       if (firebaseUser) {
-        const adminDoc = await getAdmin(firebaseUser.uid);
-        setAdmin(adminDoc);
+        try {
+          const adminDoc = await getAdmin(firebaseUser.uid);
+          if (isMounted) setAdmin(adminDoc);
+        } catch (error) {
+          console.error('Failed to load admin:', error);
+          if (isMounted) setAdmin(null);
+        }
       } else {
         setAdmin(null);
       }
-      setLoading(false);
+      if (isMounted) setLoading(false);
     });
-    return () => unsub();
+    return () => {
+      isMounted = false;
+      unsub();
+    };
   }, []);
 
   return (

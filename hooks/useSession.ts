@@ -17,11 +17,23 @@ export function useSession() {
     if (typeof window !== 'undefined') {
       setUserAgent(navigator.userAgent);
       
-      // Get IP address (client-side approximation)
-      fetch('https://api.ipify.org?format=json')
-        .then(res => res.json())
-        .then(data => setIpAddress(data.ip))
-        .catch(() => setIpAddress('unknown'));
+      // Get IP address with timeout and abort
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000);
+
+      fetch('https://api.ipify.org?format=json', { signal: controller.signal })
+        .then(res => {
+          if (!res.ok) throw new Error('IP fetch failed');
+          return res.json();
+        })
+        .then(data => setIpAddress(data.ip || 'unknown'))
+        .catch(() => setIpAddress('unknown'))
+        .finally(() => clearTimeout(timeoutId));
+
+      return () => {
+        controller.abort();
+        clearTimeout(timeoutId);
+      };
     }
   }, []);
 

@@ -13,6 +13,7 @@ import {
   deleteDoc,
   serverTimestamp,
   deleteField,
+  limit,
 } from "firebase/firestore";
 import { signOut } from "firebase/auth";
 import {
@@ -32,7 +33,7 @@ export interface MockFilterOptions {
 
 // USER OPERATIONS
 export async function getUsers(options?: MockFilterOptions) {
-  const constraints: any[] = [orderBy("createdAt", "desc")];
+  const constraints: any[] = [orderBy("createdAt", "desc"), limit(500)];
   if (options?.mock) constraints.unshift(where("mock", "==", true));
   const q = query(collection(db, "users"), ...constraints);
   const snapshot = await getDocs(q);
@@ -90,7 +91,7 @@ export async function setUserRole(userId: string, role?: string | null) {
 // TRANSACTION OPERATIONS
 export async function getTransactions(options?: MockFilterOptions) {
   // Some documents lack a uniform 'date' field; fetch all and sort client-side using known date/timestamp fields.
-  const constraints: any[] = [];
+  const constraints: any[] = [limit(1000)];
   if (options?.mock) constraints.push(where("mock", "==", true));
   const q = constraints.length
     ? query(collection(db, "transactions"), ...constraints)

@@ -5,6 +5,7 @@ import AppShell from "@/components/AppShell";
 import { AuthProvider } from "@/components/AuthProvider";
 import { ToastContainer } from "@/components/Toast";
 import { ThemeProvider } from "@/components/ThemeProvider";
+import ErrorBoundary from "@/components/ErrorBoundary";
 import { doc, getDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase";
 import ActivityTrackingLayout from "@/components/layout/ActivityTrackingLayout";
@@ -59,10 +60,12 @@ export default function RootLayout({
       <body className={`${inter.variable} font-sans antialiased bg-gray-50 dark:bg-gray-900`}>
          <ActivityTrackingLayout>
         <ThemeProvider />
+        <ErrorBoundary>
         <AuthProvider>
           <AppShell>{children}</AppShell>
           <ToastContainer />
         </AuthProvider>
+        </ErrorBoundary>
         </ActivityTrackingLayout>
       </body>
     </html>
