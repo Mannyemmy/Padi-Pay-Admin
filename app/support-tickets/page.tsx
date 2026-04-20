@@ -10,9 +10,11 @@ import {
   getDocs,
   doc,
   updateDoc,
+  addDoc,
   serverTimestamp,
   limit,
 } from 'firebase/firestore';
+import { sendUserNotification } from '@/lib/firestore';
 import { Pagination } from '@/components/Pagination';
 import { EmptyState } from '@/components/EmptyState';
 import { showToast } from '@/components/Toast';
@@ -144,9 +146,13 @@ export default function SupportTicketsPage() {
     ticketId: string,
     status: TicketStatus,
     notes: string,
+    prevStatus?: TicketStatus,
+    prevNotes?: string,
   ) => {
     setUpdating(true);
     try {
+      const ticket = tickets.find((t) => t.id === ticketId);
+
       const ref = doc(db, 'support_tickets', ticketId);
       const updates: Record<string, any> = {
         status,
@@ -157,6 +163,52 @@ export default function SupportTicketsPage() {
         updates.resolvedBy = admin?.email ?? 'admin';
       }
       await updateDoc(ref, updates);
+
+      // --- Notify the user ---
+      if (ticket) {
+        const statusChanged = prevStatus !== undefined && status !== prevStatus;
+        const notesChanged =
+          prevNotes !== undefined &&
+          notes.trim() !== prevNotes.trim() &&
+          notes.trim().length > 0;
+
+        if (statusChanged || notesChanged) {
+          let notifTitle: string;
+          let notifBody: string;
+
+          if (statusChanged && notesChanged) {
+            notifTitle = `Support ticket ${STATUS_LABELS[status].toLowerCase()}`;
+            notifBody = `Your ticket "${ticket.subject}" is now ${STATUS_LABELS[status].toLowerCase()}. Support: ${notes.trim()}`;
+          } else if (statusChanged) {
+            notifTitle = `Support ticket ${STATUS_LABELS[status].toLowerCase()}`;
+            notifBody = `Your ticket "${ticket.subject}" has been updated to: ${STATUS_LABELS[status]}.`;
+          } else {
+            notifTitle = 'Support response';
+            notifBody = `Support replied to "${ticket.subject}": ${notes.trim()}`;
+          }
+
+          // Write to in-app notifications collection
+          await addDoc(
+            collection(db, 'users', ticket.userId, 'notifications'),
+            {
+              type: 'support',
+              title: notifTitle,
+              body: notifBody,
+              ticketId: ticket.ticketId,
+              read: false,
+              timestamp: serverTimestamp(),
+            },
+          );
+
+          // Send push notification via Cloud Function (non-critical)
+          try {
+            await sendUserNotification(ticket.userId, notifTitle, notifBody);
+          } catch {
+            // Push failure is non-critical
+          }
+        }
+      }
+
       setTickets((prev) =>
         prev.map((t) =>
           t.id === ticketId
@@ -392,7 +444,13 @@ export default function SupportTicketsPage() {
                   {(Object.keys(STATUS_LABELS) as TicketStatus[]).map((s) => (
                     <button
                       key={s}
-                      onClick={() => handleUpdateTicket(selectedTicket.id, s, adminNotes)}
+                      onClick={() => handleUpdateTicket(
+                        selectedTicket.id,
+                        s,
+                        adminNotes,
+                        selectedTicket.status,
+                        selectedTicket.adminNotes ?? '',
+                      )}
                       disabled={updating || selectedTicket.status === s}
                       className={`text-xs px-3 py-1.5 rounded-full font-medium transition-all border ${
                         selectedTicket.status === s
@@ -419,7 +477,13 @@ export default function SupportTicketsPage() {
                   className="w-full text-sm px-3 py-2 border border-gray-200 dark:border-gray-700 rounded-lg bg-white dark:bg-gray-700 text-gray-900 dark:text-white focus:outline-none focus:ring-2 focus:ring-blue-500 resize-none"
                 />
                 <button
-                  onClick={() => handleUpdateTicket(selectedTicket.id, selectedTicket.status, adminNotes)}
+                  onClick={() => handleUpdateTicket(
+                    selectedTicket.id,
+                    selectedTicket.status,
+                    adminNotes,
+                    selectedTicket.status,
+                    selectedTicket.adminNotes ?? '',
+                  )}
                   disabled={updating}
                   className="mt-2 w-full py-2 text-sm font-semibold bg-blue-600 hover:bg-blue-700 text-white rounded-lg transition-colors disabled:opacity-50"
                 >
