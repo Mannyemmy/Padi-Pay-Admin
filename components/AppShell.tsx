@@ -15,6 +15,8 @@ const roleAccess: Record<string, Array<'admin' | 'customer_service' | 'complianc
   '/admins/': ['admin'],
   '/agents': ['admin'],
   '/agents/': ['admin'],
+  '/support-tickets': ['admin', 'customer_service', 'compliance_officer'],
+  '/support-tickets/': ['admin', 'customer_service', 'compliance_officer'],
   '/transactions': ['admin', 'customer_service', 'compliance_officer'],
   '/communications': ['admin', 'customer_service', 'compliance_officer'],
   '/communications/': ['admin', 'customer_service', 'compliance_officer'],
