@@ -342,6 +342,7 @@ export interface BrmMerchant {
 export type AdminRoute =
   | "/"
   | "/users"
+  | "/cards"
   | "/compliance-kyc"
   | "/login-logs"
   | "/blocked-logins"
@@ -356,7 +357,8 @@ export type AdminRoute =
   | "/settings"
   | "/data-tools"
   | "/brm-agents"
-  | "/super-agents";
+  | "/super-agents"
+  | "/support-tickets";
 
 export interface RouteInfo {
   name: string;

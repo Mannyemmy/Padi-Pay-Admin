@@ -2,6 +2,7 @@ interface StatsCardProps {
   title: string;
   value: string | number;
   icon: React.ReactNode;
+  color?: 'blue' | 'green' | 'red' | 'purple' | 'yellow' | 'gray';
   trend?: {
     value: number;
     isPositive: boolean;
@@ -9,7 +10,16 @@ interface StatsCardProps {
   subtitle?: React.ReactNode;
 }
 
-export default function StatsCard({ title, value, icon, trend, subtitle }: StatsCardProps) {
+export default function StatsCard({ title, value, icon, color = 'blue', trend, subtitle }: StatsCardProps) {
+  const colorClasses: Record<NonNullable<StatsCardProps['color']>, string> = {
+    blue: 'bg-blue-50 dark:bg-blue-900/30 text-blue-600 dark:text-blue-400',
+    green: 'bg-green-50 dark:bg-green-900/30 text-green-600 dark:text-green-400',
+    red: 'bg-red-50 dark:bg-red-900/30 text-red-600 dark:text-red-400',
+    purple: 'bg-purple-50 dark:bg-purple-900/30 text-purple-600 dark:text-purple-400',
+    yellow: 'bg-yellow-50 dark:bg-yellow-900/30 text-yellow-600 dark:text-yellow-400',
+    gray: 'bg-gray-50 dark:bg-gray-800 text-gray-600 dark:text-gray-300',
+  };
+
   return (
     <div className="card animate-in fade-in">
       <div className="flex items-center justify-between">
@@ -32,7 +42,7 @@ export default function StatsCard({ title, value, icon, trend, subtitle }: Stats
             </div>
           )}
         </div>
-        <div className="w-12 h-12 bg-blue-50 dark:bg-blue-900/30 rounded-lg flex items-center justify-center text-blue-600 dark:text-blue-400">
+        <div className={`w-12 h-12 rounded-lg flex items-center justify-center ${colorClasses[color]}`}>
           {icon}
         </div>
       </div>

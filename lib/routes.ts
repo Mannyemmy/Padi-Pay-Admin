@@ -6,6 +6,7 @@ import * as icons from 'lucide-react';
 export const allRoutes: RouteInfo[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard, category: "Overview" },
   { name: "Users", href: "/users", icon: Users, category: "User Management" },
+  { name: "Physical Cards", href: "/cards", icon: icons.CreditCard, category: "Financial" },
   { name: "Compliance & KYC", href: "/compliance-kyc", icon: icons.FileCheck, category: "Security" },
   { name: "Login Logs", href: "/login-logs", icon: icons.Logs, category: "Security" },
   { name: "Blocked Logins", href: "/blocked-logins", icon: icons.Lock, category: "Security" },
@@ -29,6 +30,7 @@ export const defaultRolePermissions: Record<AdminRole, Record<AdminRoute, boolea
   admin: {
     "/": true,
     "/users": true,
+    "/cards": true,
     "/compliance-kyc": true,
     "/login-logs": true,
     "/blocked-logins": true,
@@ -49,6 +51,7 @@ export const defaultRolePermissions: Record<AdminRole, Record<AdminRoute, boolea
   customer_service: {
     "/": true,
     "/users": true,
+    "/cards": true,
     "/compliance-kyc": false,
     "/login-logs": true,
     "/blocked-logins": true,
@@ -69,6 +72,7 @@ export const defaultRolePermissions: Record<AdminRole, Record<AdminRoute, boolea
   compliance_officer: {
     "/": true,
     "/users": true,
+    "/cards": true,
     "/compliance-kyc": true,
     "/login-logs": true,
     "/blocked-logins": true,

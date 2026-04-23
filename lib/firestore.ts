@@ -977,3 +977,115 @@ export async function updateSuperAgentStatusFn(
   const callable = httpsCallable(functions, "updateSuperAgentStatus");
   await callable({ uid, status });
 }
+
+export interface BusinessSuperAgentRecord {
+  id: string;
+  businessName: string;
+  businessEmail: string;
+  businessPhone: string;
+  isSuperAgent: boolean;
+  superAgentReferralCode: string;
+  superAgentStars: number;
+  superAgentTotalEarnings: number;
+  createdAt: Date | null;
+}
+
+export interface SuperAgentProgramSettings {
+  perNipTransferAmount: number;
+  verifiedBusinessBonusAmount: number;
+  starThresholds: {
+    1: number;
+    2: number;
+    3: number;
+    4: number;
+    5: number;
+  };
+}
+
+export async function getBusinessSuperAgentRecords(): Promise<BusinessSuperAgentRecord[]> {
+  const [snap, standUsersSnap] = await Promise.all([
+    getDocs(collection(db, "businesses")),
+    getDocs(collection(db, "standUsers")),
+  ]);
+
+  const standUserUidSet = new Set(standUsersSnap.docs.map((d) => d.id));
+
+  return snap.docs
+    .map((d) => {
+      const data = d.data() as Record<string, any>;
+      // Defensive guard: POS stands should live in `posStands` array or `standUsers`,
+      // not as top-level business documents. Exclude any stand-shaped records.
+      const isStandLikeDoc = Boolean(
+        standUserUidSet.has(d.id) ||
+        data.parentBusinessId ||
+        data.parent_business_id ||
+        data.standId ||
+        data.stand_id ||
+        data.standLoginEmail ||
+        data.stand_login_email ||
+        data.standLoginPassword ||
+        data.stand_login_password ||
+        data.isStand === true ||
+        data.is_stand === true ||
+        data.userType === "stand" ||
+        data.accountType === "stand" ||
+        data.businessType === "stand",
+      );
+      if (isStandLikeDoc) return null;
+
+      const createdRaw = data.createdAt ?? data.created_at ?? null;
+      const createdAt = createdRaw?.toDate ? createdRaw.toDate() : createdRaw ? new Date(createdRaw) : null;
+      return {
+        id: d.id,
+        businessName: data.businessName ?? data.business_name ?? data.name ?? "",
+        businessEmail: data.businessEmail ?? data.email ?? "",
+        businessPhone: data.businessPhone ?? data.phone ?? "",
+        isSuperAgent: Boolean(data.isSuperAgent),
+        superAgentReferralCode: data.superAgentReferralCode ?? "",
+        superAgentStars: Number(data.superAgentStars ?? 0),
+        superAgentTotalEarnings: Number(data.superAgentTotalEarnings ?? 0),
+        createdAt,
+      } as BusinessSuperAgentRecord;
+    })
+    .filter((record): record is BusinessSuperAgentRecord => Boolean(record))
+    .sort((a, b) => {
+      const at = a.createdAt ? new Date(a.createdAt).getTime() : 0;
+      const bt = b.createdAt ? new Date(b.createdAt).getTime() : 0;
+      return bt - at;
+    });
+}
+
+export async function setBusinessSuperAgentStatusFn(
+  businessId: string,
+  isSuperAgent: boolean,
+): Promise<{ success: boolean; businessId: string; isSuperAgent: boolean; superAgentReferralCode: string | null }> {
+  const callable = httpsCallable(functions, "setBusinessSuperAgentStatus");
+  const result = await callable({ businessId, isSuperAgent });
+  return result.data as { success: boolean; businessId: string; isSuperAgent: boolean; superAgentReferralCode: string | null };
+}
+
+export async function getSuperAgentProgramSettingsFn(): Promise<SuperAgentProgramSettings> {
+  const callable = httpsCallable(functions, "getSuperAgentProgramSettings");
+  const result = await callable();
+  const payload = result.data as { settings?: Partial<SuperAgentProgramSettings> };
+  const settings = payload.settings || {};
+
+  return {
+    perNipTransferAmount: Number(settings.perNipTransferAmount ?? 5),
+    verifiedBusinessBonusAmount: Number(settings.verifiedBusinessBonusAmount ?? 5000),
+    starThresholds: {
+      1: Number(settings.starThresholds?.[1] ?? 0),
+      2: Number(settings.starThresholds?.[2] ?? 10000),
+      3: Number(settings.starThresholds?.[3] ?? 30000),
+      4: Number(settings.starThresholds?.[4] ?? 70000),
+      5: Number(settings.starThresholds?.[5] ?? 150000),
+    },
+  };
+}
+
+export async function updateSuperAgentProgramSettingsFn(
+  payload: SuperAgentProgramSettings,
+): Promise<void> {
+  const callable = httpsCallable(functions, "updateSuperAgentProgramSettings");
+  await callable(payload);
+}
