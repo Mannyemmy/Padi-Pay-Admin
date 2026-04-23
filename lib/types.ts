@@ -355,7 +355,8 @@ export type AdminRoute =
   | "/activity-logs"
   | "/settings"
   | "/data-tools"
-  | "/brm-agents";
+  | "/brm-agents"
+  | "/super-agents";
 
 export interface RouteInfo {
   name: string;

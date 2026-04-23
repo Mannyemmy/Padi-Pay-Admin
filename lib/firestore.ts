@@ -826,3 +826,154 @@ export async function getMerchantsByBrm(brmId: string): Promise<BrmMerchant[]> {
     } as BrmMerchant;
   });
 }
+
+// ── Super Agent ──────────────────────────────────────────────────────────────
+
+export interface SuperAgent {
+  id: string;
+  full_name: string;
+  email: string;
+  phone: string;
+  referral_code: string;
+  status: "active" | "suspended";
+  total_earnings: number;
+  pending_earnings: number;
+  total_referrals: number;
+  created_at: Date | null;
+}
+
+export interface CreateSuperAgentPayload {
+  firstName: string;
+  lastName: string;
+  email: string;
+  password: string;
+  phone: string;
+  bvn: string;
+  dateOfBirth: string; // YYYY-MM-DD
+  gender: 'Male' | 'Female' | 'Others' | string;
+  addressState: string;
+  addressCity: string;
+  addressLine1: string;
+}
+
+export interface UserLookupResult {
+  found: boolean;
+  firstName: string;
+  lastName: string;
+  phone: string;
+  hasAnchorCustomer: boolean;
+  bvn: string;
+  dateOfBirth: string;
+  gender: string;
+}
+
+export async function lookupUserByEmail(email: string): Promise<UserLookupResult> {
+  const snap = await getDocs(
+    query(collection(db, "users"), where("email", "==", email.trim().toLowerCase()), limit(1))
+  );
+  if (snap.empty) {
+    return {
+      found: false,
+      firstName: "",
+      lastName: "",
+      phone: "",
+      hasAnchorCustomer: false,
+      bvn: "",
+      dateOfBirth: "",
+      gender: "",
+    };
+  }
+
+  const data = snap.docs[0].data();
+  const getAnchorData = data?.getAnchorData as Record<string, any> | undefined;
+  const customerCreation = getAnchorData?.customerCreation as Record<string, any> | undefined;
+  const customerAttributes = customerCreation?.data?.attributes as Record<string, any> | undefined;
+  const verification = getAnchorData?.verification as Record<string, any> | undefined;
+  const verificationAttributes = verification?.data?.attributes as Record<string, any> | undefined;
+
+  const fullName: string = data.full_name ?? data.name ?? "";
+  const firstName: string = data.first_name ?? data.firstName ?? fullName.split(" ")[0] ?? "";
+  const lastName: string = data.last_name ?? data.lastName ?? fullName.split(" ").slice(1).join(" ") ?? "";
+  const phone: string = data.phone_number ?? data.phone ?? data.phoneNumber ?? "";
+  const hasAnchorCustomer = !!customerCreation?.data?.id;
+
+  const bvn: string =
+    data.bvn ??
+    data.BVN ??
+    data.bankVerificationNumber ??
+    verificationAttributes?.level2?.bvn ??
+    "";
+  const dateOfBirth: string =
+    data.dateOfBirth ??
+    data.date_of_birth ??
+    data.dob ??
+    customerAttributes?.dateOfBirth ??
+    verificationAttributes?.level2?.dateOfBirth ??
+    "";
+  const gender: string =
+    data.gender ??
+    customerAttributes?.gender ??
+    verificationAttributes?.level2?.gender ??
+    "";
+
+  return {
+    found: true,
+    firstName,
+    lastName,
+    phone,
+    hasAnchorCustomer,
+    bvn,
+    dateOfBirth,
+    gender,
+  };
+}
+
+export async function getSuperAgents(): Promise<SuperAgent[]> {
+
+  const snap = await getDocs(
+    query(collection(db, "superAgents"), orderBy("created_at", "desc"))
+  );
+  return snap.docs.map((d) => {
+    const data = d.data();
+    return {
+      id: d.id,
+      full_name: data.full_name ?? "",
+      email: data.email ?? "",
+      phone: data.phone ?? "",
+      referral_code: data.referral_code ?? "",
+      status: data.status ?? "active",
+      total_earnings: data.total_earnings ?? 0,
+      pending_earnings: data.pending_earnings ?? 0,
+      total_referrals: data.total_referrals ?? 0,
+      created_at: data.created_at?.toDate ? data.created_at.toDate() : null,
+    } as SuperAgent;
+  });
+}
+
+export async function createSuperAgentFn(
+  payload: CreateSuperAgentPayload,
+): Promise<{ uid: string; referralCode: string }> {
+  const callable = httpsCallable(functions, "createSuperAgent");
+  const result = await callable(payload);
+  return result.data as { uid: string; referralCode: string };
+}
+
+export async function sendSuperAgentWelcomeEmailFn(payload: {
+  email: string;
+  firstName: string;
+  lastName: string;
+  password: string;
+  referralCode: string;
+  loginUrl: string;
+}): Promise<void> {
+  const callable = httpsCallable(functions, "sendSuperAgentWelcomeEmail");
+  await callable(payload);
+}
+
+export async function updateSuperAgentStatusFn(
+  uid: string,
+  status: "active" | "suspended",
+): Promise<void> {
+  const callable = httpsCallable(functions, "updateSuperAgentStatus");
+  await callable({ uid, status });
+}

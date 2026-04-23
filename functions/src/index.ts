@@ -893,8 +893,44 @@ export const changeBrmPassword = onCall(async (request) => {
   logger.info(`BRM password changed by self: ${request.auth.uid}`);
   return {success: true};
 });
+import {defineSecret} from "firebase-functions/params";
 
+const getanchorSecretKey = defineSecret("GETANCHOR_SECRET_KEY");
+const ANCHOR_BASE_URL = "https://api.getanchor.co/api/v1";
 
+/** Make an Anchor API request. Uses live URL; no sandbox override logic needed here. */
+async function anchorRequest({
+  url,
+  method,
+  secretKey,
+  body = null,
+  idempotencyKey = null,
+}: {
+  url: string;
+  method: string;
+  secretKey: string;
+  body?: object | null;
+  idempotencyKey?: string | null;
+}): Promise<unknown> {
+  const headers: Record<string, string> = {
+    accept: "application/json",
+    "x-anchor-key": secretKey,
+  };
+  if (method === "POST" || method === "PUT") {
+    headers["content-type"] = "application/json";
+  }
+  if (idempotencyKey) {
+    headers["x-anchor-idempotent-key"] = idempotencyKey;
+  }
+  const options: RequestInit = {method, headers};
+  if (body) options.body = JSON.stringify(body);
+  const response = await fetch(url, options);
+  const text = await response.text();
+  if (!response.status.toString().startsWith("2")) {
+    throw new Error(`Anchor HTTP ${response.status}: ${text}`);
+  }
+  return JSON.parse(text);
+}
  /* Balance is a random mock value stored directly; no Anchor API call needed.
  */
 export const seedCompanyAccount = onCall(async (request) => {
@@ -1030,4 +1066,508 @@ export const onTransactionCreated = onDocumentCreated(
     );
   }
 );
+
+// ── Super Agent ─────────────────────────────────────────────────────────
+
+/**
+ * Create a new Super Agent (stored ONLY in the `superAgents` collection).
+ *
+ * Handles three cases for the email provided:
+ *  A) Brand new — no Firebase Auth user, no Firestore user doc.
+ *     → Create Anchor customer → upgrade TIER_2 KYC → create SA electronic account.
+ *  B) Exists in Auth but no `users` doc (or doc has no Anchor customer).
+ *     → Same as (A): full Anchor customer + KYC + account creation.
+ *  C) Exists in Auth AND has a `users` doc with a valid Anchor customer ID.
+ *     → Reuse existing customer ID (skip create + KYC).
+ *     → Create a NEW electronic account specifically for this super agent.
+ *       (SA virtual account is separate from their personal user account.)
+ *
+ * In all cases the agent is written to `superAgents/{uid}`, never to
+ * `users` or `businesses`.
+ */
+export const createSuperAgent = onCall({secrets: [getanchorSecretKey]}, async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  const callerDoc = await admin
+    .firestore()
+    .collection("admins")
+    .doc(request.auth.uid)
+    .get();
+
+  if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "Only admins can create Super Agents");
+  }
+
+  const {
+    firstName, lastName, email, password, phone,
+    bvn, dateOfBirth, gender, addressState, addressCity, addressLine1,
+  } = request.data;
+
+  // Always-required fields
+  if (!firstName || !lastName || !email || !password || !phone) {
+    throw new HttpsError("invalid-argument", "firstName, lastName, email, password and phone are required");
+  }
+  if (password.length < 8) {
+    throw new HttpsError("invalid-argument", "Password must be at least 8 characters");
+  }
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRegex.test(email)) {
+    throw new HttpsError("invalid-argument", "Invalid email format");
+  }
+
+  // Block duplicate super agents (superAgents collection only)
+  const emailConflict = await admin
+    .firestore()
+    .collection("superAgents")
+    .where("email", "==", email)
+    .limit(1)
+    .get();
+  if (!emailConflict.empty) {
+    throw new HttpsError("already-exists", "A Super Agent with this email already exists");
+  }
+
+  // ── Probe Firebase Auth for an existing account ──────────────────────
+  // A user may already have a Firebase Auth account and/or a users doc.
+  // We use that to reuse their Anchor customer (avoid duplicate KYC).
+  let existingAuthUid: string | null = null;
+  let existingAnchorCustomerId: string | null = null;
+
+  try {
+    const authUser = await admin.auth().getUserByEmail(email.trim());
+    existingAuthUid = authUser.uid;
+    logger.info(`createSuperAgent: found existing Auth user ${existingAuthUid} for ${email}`);
+
+    // Check users collection for Anchor customer data
+    const userDoc = await admin.firestore().collection("users").doc(existingAuthUid).get();
+    if (userDoc.exists) {
+      const userData = userDoc.data() as Record<string, unknown>;
+      const customerId =
+        (userData?.getAnchorData as Record<string, unknown> | undefined)
+          ?.customerCreation as Record<string, unknown> | undefined;
+      const cid = customerId?.data as Record<string, unknown> | undefined;
+      const cidStr = cid?.id as string | undefined;
+      if (cidStr) {
+        existingAnchorCustomerId = cidStr;
+        logger.info(`createSuperAgent: reusing Anchor customer ${existingAnchorCustomerId} from users doc`);
+      }
+    }
+  } catch {
+    // getUserByEmail throws if user doesn't exist — that's fine, proceed as new
+  }
+
+  // KYC/address fields are only mandatory when we cannot reuse an existing Anchor customer.
+  if (!existingAnchorCustomerId) {
+    if (!bvn || !dateOfBirth || !gender || !addressState || !addressCity || !addressLine1) {
+      throw new HttpsError("invalid-argument", "All fields including KYC details are required");
+    }
+    if (!/^\d{11}$/.test(String(bvn).trim())) {
+      throw new HttpsError("invalid-argument", "BVN must be exactly 11 digits");
+    }
+  }
+
+  // ── Generate referral code ────────────────────────────────────────────
+  function generateSACode(): string {
+    const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+    let code = "";
+    const randomBytes = crypto.randomBytes(6);
+    for (let i = 0; i < 6; i++) {
+      code += chars[randomBytes[i] % chars.length];
+    }
+    return `PADI-SA-${code}`;
+  }
+
+  let referralCode = "";
+  for (let attempt = 0; attempt < 5; attempt++) {
+    const candidate = generateSACode();
+    const existing = await admin
+      .firestore()
+      .collection("superAgents")
+      .where("referral_code", "==", candidate)
+      .limit(1)
+      .get();
+    if (existing.empty) { referralCode = candidate; break; }
+  }
+  if (!referralCode) {
+    throw new HttpsError("internal", "Could not generate a unique referral code");
+  }
+
+  const passwordHash = await bcrypt.hash(password, 12);
+
+  try {
+    // Super agents always get their own doc in `superAgents` collection.
+    // Use existing Auth uid as doc id if available so commission hooks can
+    // later look up commissions by uid — otherwise generate a new doc id.
+    const agentRef = existingAuthUid
+      ? admin.firestore().collection("superAgents").doc(existingAuthUid)
+      : admin.firestore().collection("superAgents").doc();
+    const uid = agentRef.id;
+
+    await agentRef.set({
+      full_name: `${firstName} ${lastName}`,
+      first_name: firstName,
+      last_name: lastName,
+      email,
+      phone,
+      referral_code: referralCode,
+      password_hash: passwordHash,
+      status: "active",
+      total_earnings: 0,
+      pending_earnings: 0,
+      total_referrals: 0,
+      linked_auth_uid: existingAuthUid ?? null,
+      created_at: admin.firestore.FieldValue.serverTimestamp(),
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+      created_by: request.auth!.uid,
+    });
+
+    logger.info(`Created Super Agent doc: ${uid} (linked_auth_uid: ${existingAuthUid}), code: ${referralCode}`);
+
+    // ── Anchor Banking Setup (non-fatal) ──────────────────────────────
+    const anchorKey = getanchorSecretKey.value();
+    if (anchorKey) {
+      try {
+        let anchorCustomerId = existingAnchorCustomerId;
+
+        if (!anchorCustomerId) {
+          // Case A/B: no existing customer — create one and upgrade KYC
+          const customerRes = await anchorRequest({
+            url: `${ANCHOR_BASE_URL}/customers`,
+            method: "POST",
+            secretKey: anchorKey,
+            body: {
+              data: {
+                attributes: {
+                  fullName: {firstName: firstName.trim(), lastName: lastName.trim()},
+                  address: {
+                    country: "NG",
+                    state: addressState.trim(),
+                    addressLine_1: addressLine1.trim(),
+                    city: addressCity.trim(),
+                    postalCode: "100001",
+                  },
+                  email: email.trim(),
+                  phoneNumber: phone.trim(),
+                },
+                type: "IndividualCustomer",
+              },
+            },
+          }) as {data: {id: string}};
+
+          anchorCustomerId = customerRes.data.id;
+          logger.info(`Anchor customer created: ${anchorCustomerId}`);
+
+          // Upgrade to TIER_2 KYC
+          await anchorRequest({
+            url: `${ANCHOR_BASE_URL}/customers/${encodeURIComponent(anchorCustomerId)}/verification/individual`,
+            method: "POST",
+            secretKey: anchorKey,
+            body: {
+              data: {
+                attributes: {
+                  level: "TIER_2",
+                  level2: {bvn: bvn.trim(), dateOfBirth: dateOfBirth.trim(), gender: gender.trim()},
+                },
+                type: "Verification",
+              },
+            },
+          });
+          logger.info(`Anchor KYC TIER_2 submitted for customer: ${anchorCustomerId}`);
+        } else {
+          // Case C: existing customer reused — skip create + KYC
+          logger.info(`Anchor: reusing existing customer ${anchorCustomerId}, skipping create + KYC`);
+        }
+
+        // Always create a dedicated SA electronic account (separate from user's personal account)
+        const idempotencyKey = `SA-${uid}-${Date.now()}`;
+        const accountRes = await anchorRequest({
+          url: `${ANCHOR_BASE_URL}/accounts`,
+          method: "POST",
+          secretKey: anchorKey,
+          idempotencyKey,
+          body: {
+            data: {
+              attributes: {productName: "SAVINGS"},
+              relationships: {customer: {data: {id: anchorCustomerId, type: "IndividualCustomer"}}},
+              type: "DepositAccount",
+            },
+          },
+        }) as {data: {id: string; attributes: {accountNumber: string}}};
+
+        const accountId: string = accountRes.data.id;
+        const accountNumber: string = accountRes.data.attributes?.accountNumber ?? "";
+        const bankName = "Anchor MFB";
+        logger.info(`Anchor SA account created: ${accountId}, number: ${accountNumber}`);
+
+        await agentRef.update({
+          anchor_customer_id: anchorCustomerId,
+          anchor_account_id: accountId,
+          account_number: accountNumber,
+          bank_name: bankName,
+          anchor_kyc_tier: 2,
+          anchor_customer_reused: !!existingAnchorCustomerId,
+          anchor_setup_at: admin.firestore.FieldValue.serverTimestamp(),
+        });
+      } catch (anchorErr: unknown) {
+        logger.error("Anchor setup failed (agent still created):", anchorErr);
+        await agentRef.update({
+          anchor_setup_error: String((anchorErr as Error).message || anchorErr),
+        });
+      }
+    }
+
+    return {uid, referralCode};
+  } catch (error: unknown) {
+    logger.error("Error creating Super Agent:", error);
+    throw new HttpsError("internal", "Failed to create Super Agent");
+  }
+});
+
+/**
+ * Authenticate a Super Agent using Firestore bcrypt credentials.
+ * Returns a Firebase Custom Token for signInWithCustomToken().
+ */
+export const superAgentLogin = onCall(async (request) => {
+  const {email, password} = request.data;
+
+  if (!email || !password) {
+    throw new HttpsError("invalid-argument", "Email and password are required");
+  }
+
+  const snap = await admin
+    .firestore()
+    .collection("superAgents")
+    .where("email", "==", email)
+    .limit(1)
+    .get();
+
+  if (snap.empty) {
+    throw new HttpsError("unauthenticated", "Invalid email or password");
+  }
+
+  const agentDoc = snap.docs[0];
+  const agent = agentDoc.data();
+
+  if (agent.status === "suspended") {
+    throw new HttpsError(
+      "permission-denied",
+      "Your account has been suspended. Please contact support."
+    );
+  }
+
+  const storedHash: string | undefined = agent.password_hash;
+  if (!storedHash) {
+    logger.warn(`Super Agent ${agentDoc.id} has no password_hash — login rejected`);
+    throw new HttpsError("unauthenticated", "Invalid email or password");
+  }
+
+  // Brute-force lockout: lock 15 min after 5 consecutive failures
+  const failedAttempts = agent.failedLoginAttempts || 0;
+  const lockedUntil = agent.lockedUntil || 0;
+
+  if (lockedUntil > Date.now()) {
+    const minutesLeft = Math.ceil((lockedUntil - Date.now()) / 60000);
+    throw new HttpsError(
+      "resource-exhausted",
+      `Account temporarily locked. Try again in ${minutesLeft} minute(s).`
+    );
+  }
+
+  const match = await bcrypt.compare(password, storedHash);
+  if (!match) {
+    const newAttempts = failedAttempts + 1;
+    const updateData: Record<string, any> = {failedLoginAttempts: newAttempts};
+    if (newAttempts >= 5) {
+      updateData.lockedUntil = Date.now() + 15 * 60 * 1000;
+    }
+    await agentDoc.ref.update(updateData);
+    throw new HttpsError("unauthenticated", "Invalid email or password");
+  }
+
+  if (failedAttempts > 0) {
+    await agentDoc.ref.update({failedLoginAttempts: 0, lockedUntil: 0});
+  }
+
+  const customToken = await admin.auth().createCustomToken(agentDoc.id, {
+    superAgent: true,
+  });
+
+  logger.info(`Super Agent login success: ${agentDoc.id}`);
+  return {
+    customToken,
+    uid: agentDoc.id,
+    referralCode: agent.referral_code ?? null,
+  };
+});
+
+/**
+ * Reset a Super Agent password using an OTP previously emailed via sendEmailOTP.
+ */
+export const resetSuperAgentPasswordWithOtp = onCall(async (request) => {
+  const {email, pinId, code, newPassword} = request.data;
+
+  if (!email || !pinId || !code || !newPassword) {
+    throw new HttpsError(
+      "invalid-argument",
+      "email, pinId, code and newPassword are required"
+    );
+  }
+
+  if (newPassword.length < 8) {
+    throw new HttpsError("invalid-argument", "New password must be at least 8 characters");
+  }
+
+  const normalizedEmail = String(email).trim().toLowerCase();
+  const otpRef = admin.firestore().collection("emailOtps").doc(String(pinId));
+  const otpSnap = await otpRef.get();
+
+  if (!otpSnap.exists) {
+    throw new HttpsError("not-found", "OTP request was not found");
+  }
+
+  const otp = otpSnap.data();
+  if (!otp) {
+    throw new HttpsError("not-found", "OTP request was not found");
+  }
+  if (otp.used) {
+    throw new HttpsError("failed-precondition", "OTP has already been used");
+  }
+  if (Date.now() > otp.expiresAt) {
+    throw new HttpsError("deadline-exceeded", "OTP has expired");
+  }
+  if (String(otp.email).trim().toLowerCase() !== normalizedEmail) {
+    throw new HttpsError("permission-denied", "OTP does not match this email");
+  }
+  if (otp.purpose !== "password_reset") {
+    throw new HttpsError("failed-precondition", "OTP is not valid for password reset");
+  }
+
+  const MAX_ATTEMPTS = 5;
+  const attempts = (otp.attempts || 0) + 1;
+  if (attempts > MAX_ATTEMPTS) {
+    await otpRef.update({used: true});
+    throw new HttpsError("resource-exhausted", "Too many incorrect attempts. Request a new OTP.");
+  }
+
+  if (String(otp.code) !== String(code).trim()) {
+    await otpRef.update({attempts});
+    throw new HttpsError("unauthenticated", "Invalid OTP code");
+  }
+
+  const agentSnap = await admin
+    .firestore()
+    .collection("superAgents")
+    .where("email", "==", normalizedEmail)
+    .limit(1)
+    .get();
+
+  if (agentSnap.empty) {
+    throw new HttpsError("not-found", "No Super Agent account found for this email");
+  }
+
+  const passwordHash = await bcrypt.hash(newPassword, 12);
+  const agentRef = agentSnap.docs[0].ref;
+
+  await admin.firestore().runTransaction(async (tx) => {
+    tx.update(agentRef, {
+      password_hash: passwordHash,
+      updated_at: admin.firestore.FieldValue.serverTimestamp(),
+    });
+    tx.update(otpRef, {
+      used: true,
+      usedAt: admin.firestore.FieldValue.serverTimestamp(),
+    });
+  });
+
+  logger.info(`Super Agent password reset via OTP: ${agentRef.id}`);
+  return {success: true};
+});
+
+/**
+ * Change a Super Agent's own password while authenticated.
+ */
+export const changeSuperAgentPassword = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  const {currentPassword, newPassword} = request.data;
+
+  if (!currentPassword || !newPassword) {
+    throw new HttpsError("invalid-argument", "currentPassword and newPassword are required");
+  }
+
+  if (newPassword.length < 8) {
+    throw new HttpsError("invalid-argument", "New password must be at least 8 characters");
+  }
+
+  if (currentPassword === newPassword) {
+    throw new HttpsError("invalid-argument", "New password must differ from the current password");
+  }
+
+  const agentRef = admin.firestore().collection("superAgents").doc(request.auth.uid);
+  const agentSnap = await agentRef.get();
+
+  if (!agentSnap.exists) {
+    throw new HttpsError("not-found", "Super Agent account not found");
+  }
+
+  const agent = agentSnap.data()!;
+
+  if (agent.status === "suspended") {
+    throw new HttpsError("permission-denied", "Account is suspended");
+  }
+
+  const storedHash: string | undefined = agent.password_hash;
+  if (!storedHash) {
+    throw new HttpsError("failed-precondition", "Account has no password set");
+  }
+
+  const match = await bcrypt.compare(currentPassword, storedHash);
+  if (!match) {
+    throw new HttpsError("unauthenticated", "Current password is incorrect");
+  }
+
+  const newHash = await bcrypt.hash(newPassword, 12);
+  await agentRef.update({
+    password_hash: newHash,
+    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  logger.info(`Super Agent password changed: ${agentRef.id}`);
+  return {success: true};
+});
+
+/**
+ * Admin: update a Super Agent's status (active/suspended).
+ */
+export const updateSuperAgentStatus = onCall(async (request) => {
+  if (!request.auth) {
+    throw new HttpsError("unauthenticated", "User must be authenticated");
+  }
+
+  const callerDoc = await admin
+    .firestore()
+    .collection("admins")
+    .doc(request.auth.uid)
+    .get();
+
+  if (!callerDoc.exists || callerDoc.data()?.role !== "admin") {
+    throw new HttpsError("permission-denied", "Only admins can update Super Agent status");
+  }
+
+  const {uid, status} = request.data;
+  if (!uid || !["active", "suspended"].includes(status)) {
+    throw new HttpsError("invalid-argument", "uid and status (active|suspended) are required");
+  }
+
+  await admin.firestore().collection("superAgents").doc(uid).update({
+    status,
+    updated_at: admin.firestore.FieldValue.serverTimestamp(),
+  });
+
+  logger.info(`Super Agent ${uid} status updated to: ${status}`);
+  return {success: true};
+});
 
