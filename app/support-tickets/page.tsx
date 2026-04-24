@@ -114,7 +114,7 @@ export default function SupportTicketsPage() {
       setTickets(items);
     } catch (e) {
       console.error('Failed to fetch support tickets:', e);
-      showToast('Failed to load support tickets', 'error');
+      showToast('error', 'Failed to load support tickets');
     } finally {
       setLoading(false);
     }
@@ -141,6 +141,11 @@ export default function SupportTicketsPage() {
     const start = (currentPage - 1) * pageSize;
     return filtered.slice(start, start + pageSize);
   }, [filtered, currentPage]);
+
+  const totalPages = useMemo(
+    () => Math.max(1, Math.ceil(filtered.length / pageSize)),
+    [filtered.length],
+  );
 
   const handleUpdateTicket = async (
     ticketId: string,
@@ -203,7 +208,8 @@ export default function SupportTicketsPage() {
           // Send push notification via Cloud Function (non-critical)
           try {
             await sendUserNotification(ticket.userId, notifTitle, notifBody);
-          } catch {
+          } catch (pushError) {
+            console.error('Failed to send push notification:', pushError);
             // Push failure is non-critical
           }
         }
@@ -219,10 +225,10 @@ export default function SupportTicketsPage() {
       if (selectedTicket?.id === ticketId) {
         setSelectedTicket((prev) => prev ? { ...prev, status, adminNotes: notes } : prev);
       }
-      showToast('Ticket updated', 'success');
+      showToast('success', 'Ticket updated');
     } catch (e) {
       console.error('Failed to update ticket:', e);
-      showToast('Failed to update ticket', 'error');
+      showToast('error', 'Failed to update ticket');
     } finally {
       setUpdating(false);
     }
@@ -310,7 +316,11 @@ export default function SupportTicketsPage() {
           <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-600" />
         </div>
       ) : filtered.length === 0 ? (
-        <EmptyState message="No support tickets found" />
+        <EmptyState
+          icon={<TicketCheck className="w-8 h-8" />}
+          title="No support tickets found"
+          description="Try adjusting your search or filter criteria."
+        />
       ) : (
         <div className="bg-white dark:bg-gray-800 rounded-xl border border-gray-200 dark:border-gray-700 overflow-hidden">
           <div className="overflow-x-auto">
@@ -376,8 +386,7 @@ export default function SupportTicketsPage() {
           <div className="p-4 border-t border-gray-100 dark:border-gray-700">
             <Pagination
               currentPage={currentPage}
-              totalItems={filtered.length}
-              pageSize={pageSize}
+              totalPages={totalPages}
               onPageChange={setCurrentPage}
             />
           </div>
