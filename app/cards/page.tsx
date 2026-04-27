@@ -5,11 +5,14 @@ import {
   addDoc,
   collection,
   doc,
+  getDoc,
   getDocs,
   query,
   serverTimestamp,
+  setDoc,
   updateDoc,
 } from "firebase/firestore";
+import { getAuth } from "firebase/auth";
 import { db } from "@/lib/firebase";
 import { showToast } from "@/components/Toast";
 
@@ -75,6 +78,11 @@ export default function CardsPage() {
   const [cards, setCards] = useState<InventoryCard[]>([]);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [rateLoading, setRateLoading] = useState(true);
+  const [rateSaving, setRateSaving] = useState(false);
+  const [usdNgnRateInput, setUsdNgnRateInput] = useState("");
+  const [usdNgnRateUpdatedBy, setUsdNgnRateUpdatedBy] = useState<string | null>(null);
+  const [usdNgnRateUpdatedAt, setUsdNgnRateUpdatedAt] = useState<Date | null>(null);
 
   const [brand, setBrand] = useState<CardBrand>("Verve");
   const [singleCardNumber, setSingleCardNumber] = useState("");
@@ -135,8 +143,73 @@ export default function CardsPage() {
     }
   };
 
+  const loadUsdNgnRate = async () => {
+    try {
+      setRateLoading(true);
+      const companyRef = doc(db, "company", "sudoAccountDetails");
+      const companySnap = await getDoc(companyRef);
+      const companyData = companySnap.data() as Record<string, unknown> | undefined;
+      const rawRate = companyData?.usdNgnRate;
+      const parsedRate =
+        typeof rawRate === "number"
+          ? rawRate
+          : typeof rawRate === "string"
+            ? Number(rawRate)
+            : NaN;
+
+      if (Number.isFinite(parsedRate) && parsedRate > 0) {
+        setUsdNgnRateInput(String(parsedRate));
+      }
+
+      setUsdNgnRateUpdatedBy(
+        typeof companyData?.usdNgnRateUpdatedBy === "string"
+          ? companyData.usdNgnRateUpdatedBy
+          : null,
+      );
+      const updatedAt = toDate(companyData?.usdNgnRateUpdatedAt);
+      setUsdNgnRateUpdatedAt(updatedAt ?? null);
+    } catch (err) {
+      console.error("Failed to load USD/NGN rate", err);
+      showToast("error", "Load failed", "Could not fetch USD/NGN rate");
+    } finally {
+      setRateLoading(false);
+    }
+  };
+
+  const saveUsdNgnRate = async () => {
+    const rate = Number(usdNgnRateInput.trim());
+    if (!Number.isFinite(rate) || rate <= 0) {
+      showToast("error", "Invalid rate", "Enter a valid USD/NGN rate greater than zero");
+      return;
+    }
+
+    try {
+      setRateSaving(true);
+      const auth = getAuth();
+      const editor = auth.currentUser?.email || auth.currentUser?.uid || "admin";
+      await setDoc(
+        doc(db, "company", "sudoAccountDetails"),
+        {
+          usdNgnRate: rate,
+          usdNgnRateUpdatedBy: editor,
+          usdNgnRateUpdatedAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        },
+        { merge: true },
+      );
+      showToast("success", "Rate saved", `1 USD = NGN ${rate.toLocaleString()}`);
+      await loadUsdNgnRate();
+    } catch (err) {
+      console.error("Failed to save USD/NGN rate", err);
+      showToast("error", "Save failed", "Could not update USD/NGN rate");
+    } finally {
+      setRateSaving(false);
+    }
+  };
+
   useEffect(() => {
     loadCards();
+    loadUsdNgnRate();
   }, []);
 
   const metrics = useMemo(() => {
@@ -275,6 +348,53 @@ export default function CardsPage() {
         <p className="text-sm text-gray-600">
           Securely load card numbers, monitor assignment status, and update delivery tracking.
         </p>
+      </div>
+
+      <div className="card space-y-4 p-5">
+        <div>
+          <h2 className="text-lg font-semibold text-gray-900">USD/NGN Rate Settings</h2>
+          <p className="text-sm text-gray-600">
+            This rate is used during USD card creation and displayed to customers in app.
+          </p>
+        </div>
+
+        <div className="grid grid-cols-1 gap-3 md:grid-cols-3">
+          <label className="text-sm md:col-span-2">
+            <span className="mb-1 block text-gray-600">1 USD equals how many NGN?</span>
+            <input
+              value={usdNgnRateInput}
+              onChange={(e) => setUsdNgnRateInput(e.target.value)}
+              inputMode="decimal"
+              className="w-full rounded-lg border border-gray-300 px-3 py-2"
+              placeholder="e.g. 1600"
+              disabled={rateLoading || rateSaving}
+            />
+          </label>
+          <div className="flex items-end">
+            <button
+              type="button"
+              onClick={saveUsdNgnRate}
+              disabled={rateLoading || rateSaving}
+              className="w-full rounded-lg bg-blue-600 px-4 py-2 text-sm font-medium text-white disabled:opacity-50"
+            >
+              {rateSaving ? "Saving..." : "Save Rate"}
+            </button>
+          </div>
+        </div>
+
+        <div className="text-xs text-gray-500">
+          {rateLoading
+            ? "Loading latest rate..."
+            : usdNgnRateInput
+              ? `Current rate: 1 USD = NGN ${Number(usdNgnRateInput).toLocaleString()}`
+              : "No USD/NGN rate configured yet."}
+          {(usdNgnRateUpdatedBy || usdNgnRateUpdatedAt) && (
+            <p className="mt-1">
+              Last updated{usdNgnRateUpdatedBy ? ` by ${usdNgnRateUpdatedBy}` : ""}
+              {usdNgnRateUpdatedAt ? ` on ${usdNgnRateUpdatedAt.toLocaleString()}` : ""}
+            </p>
+          )}
+        </div>
       </div>
 
       <div className="grid grid-cols-1 gap-4 md:grid-cols-4">

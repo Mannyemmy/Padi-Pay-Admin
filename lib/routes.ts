@@ -6,7 +6,7 @@ import * as icons from 'lucide-react';
 export const allRoutes: RouteInfo[] = [
   { name: "Dashboard", href: "/", icon: LayoutDashboard, category: "Overview" },
   { name: "Users", href: "/users", icon: Users, category: "User Management" },
-  { name: "Physical Cards", href: "/cards", icon: icons.CreditCard, category: "Financial" },
+  { name: "Card Management", href: "/cards", icon: icons.CreditCard, category: "Financial" },
   { name: "Compliance & KYC", href: "/compliance-kyc", icon: icons.FileCheck, category: "Security" },
   { name: "Login Logs", href: "/login-logs", icon: icons.Logs, category: "Security" },
   { name: "Blocked Logins", href: "/blocked-logins", icon: icons.Lock, category: "Security" },
